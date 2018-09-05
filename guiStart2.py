@@ -11,6 +11,13 @@ global fields
 import calData as cal
 import os
 import pandas as pd
+import matplotlib
+#matplotlib.use('TkAgg')
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from tkinter import dialog as Dialog
+from tkinter import filedialog as LoadFileDialog
+from tkinter import scrolledtext as ScrolledText
 
 FileCCF="CCF4.csv"
 PathCCF = "D:/Geomarr/Spectrum/"
@@ -31,103 +38,166 @@ CCFdata = cal.readIQDatafileCCF(PathCCF,FileCCF)
 #TEST filename = 0RFISpectrum
 #TEST start_freq = 1000
 #TEST stop_freq = 1040
+class FilenameEntry(Frame):
 
+	def __init__(self, master, text):
+		Frame.__init__(self, master)
+		Label(self, text=text).pack(side=LEFT)
+		self.filename = StringVar()
+		Entry(self, textvariable=self.filename).pack(side=LEFT, fill=X)
+		Button(self, text="Browse...", command=self.browse).pack(side=RIGHT)
 
-    
-def fetch(data_enter):
-    Path= data_enter['Path'].get()
-    Filename = ents['Filename'].get()
-    Start_freq = data_enter['Start Frequency (MHz)'].get()
-    Stop_freq = data_enter['Stop Frequency (MHz)'].get()
-    G_LNA = data_enter['LNA gain (dB)'].get() 
-    Lcable = data_enter['Cable losses (dB)'].get()
-    antennaEfficiency = data_enter['Antenna efficiency'].get()
-    print('Path: %s \nFilename: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (Path, Filename, Start_freq, Stop_freq, G_LNA, Lcable, antennaEfficiency)) 
-   
-def get_data(l):
-    l.append(box1.get())
-    print(l)
-    
-def makeform(root, fields):
-   entries = {}
-   for field in fields: 
-      row = Frame(root)
-      lab = Label(row, width=22, text=field+": ", anchor='w')
-      ent = Entry(row)
-     # ent.insert(0,"0")
-      row.pack(side=TOP, fill=X, padx=5, pady=5)
-      lab.pack(side=LEFT)
-      ent.pack(side=RIGHT, expand=YES, fill=X)
-      entries[field] = ent 
-   return entries
-   
-def cal_data(data_enter):
-   start_freq = int(data_enter['Start Frequency (MHz)'].get())*1e6
-   stop_freq = int(data_enter['Stop Frequency (MHz)'].get())*1e6
-   Freqlist =cal.generate_CFlist(start_freq,stop_freq)
-   Length_freq = len(Freqlist)
-   F = []
-   tempCCFData = []
-   tempSpec = []
-   # Average CCF for each given centre frequency and AcqBW
-   #upperfreq = start_freq + AcqBW/2 
-   #lowerfreq = stop_freq - AcqBW/2
-# get the spectrum
-   G_LNA = int(data_enter['LNA gain (dB)'].get()) 
-   Lcable = int(data_enter['Cable losses (dB)'].get())
-   antennaEfficiency = float(data_enter['Antenna efficiency'].get())
-   path = data_enter['Path'].get() +"_gLNA"+str(G_LNA)+"_Lcable"+str(Lcable)+"_EffAnt"+str(antennaEfficiency)+"/"
-   path = data_enter['Path'].get()
-   filename = data_enter['Filename'].get()  
+	def browse(self):
+		file = LoadFileDialog(self).go(pattern='*')
+		if file:
+			self.filename.set(file)
 
-   # Extract the CCF for the correct freqeuncy range and get the raw spectrum data in one array 
-   for i in Freqlist:
-       temp = 0
-       count = 0
-       fileName = filename+str(int(i/1e6))+"MHz.npy"
-       F.append(fileName)
-       for j in range(len(CCFdata)):
-           upperfreq = i + AcqBW/2 
-           lowerfreq = i - AcqBW/2
-           if lowerfreq <= CCFdata[j][0] and upperfreq >= CCFdata[j][0]:
-               temp = CCFdata[j][1] + temp# Chamber Calibration Factor in dBm
-               count +=1
-       CCFavg = temp/count
-       tempCCFData.append(CCFavg)
-   F = np.array(F, dtype = 'str')         
-   tempCCFData = np.array(tempCCFData, dtype = 'float')  
-   
-   # Calibrate the raw spectrum
-   for i in range(Length_freq):
-       fileName = F[i]
-       centerFreq = Freqlist[i] #Hz
-       CCF = tempCCFData[i]
-       ReadFile = cal.readIQDataBin(path,fileName)
-       Spec = cal.calCCF(ReadFile, CCF, r, Lcable, G_LNA, antennaEfficiency)
-       tempSpec.append(Spec)
+	def get(self):
+		return self.filename.get()
+
+class ButtonBar(Frame):
+
+	def __init__(self, master, left_button_list, right_button_list):
+		Frame.__init__(self, master, bd=2, relief=SUNKEN)
+		for button, action in left_button_list:
+			Button(self, text=button, command=action).pack(side=LEFT)
+		for button, action in right_button_list:
+			Button(self, text=button, command=action).pack(side=RIGHT)
+
+class FileNotFoundMessage(Dialog):
+
+	def __init__(self, master, filename):
+		Dialog.__init__(self, master, title = 'File not found',
+			text = 'File ' + filename + ' does not exist',
+			bitmap = 'warning', default = 0,
+			strings = ('Cancel',))
+
+class GUI_set_up:
+    def __init__(self,  window, fields):
+        self.Path= "D:/Geomarr/Spectrum/"
+        self.Filename = "0RFISpectrum"
+        self.Start_freq = 1000
+        self.Stop_freq = 1040
+        self.G_LNA = 10 
+        self.Lcable = -1
+        self.antennaEfficiency = 0.75
+        
+        self.window = window
+        self.window.title("RFI Chamber")
+       #self.frame = Frame(window)
+        #self.entry = Entry(self.frame)
+        self.entry_data = self.makeform(fields)
+        self.window.bind('<Return>', (lambda event,e=self.entry_data: self.fetch()))
+        #self.label =  Label(self.frame, width=22, text=field+": ", anchor='w')
+        self.button_get = Button(self.window,text = 'accept', command = (lambda e=self.entry_data: self.fetch()))
+        self.button_get.pack(side=LEFT, padx=5, pady=5)
+        self.button_plot=Button(window,text = 'show plot', command=(lambda e=self.entry_data: self.cal_data()))
+        self.button_plot.pack(side=LEFT, padx=5, pady=5)
+        
+        
+    def fetch(self):          
+        self.Path= self.entry_data['Path'].get()
+        self.Filename = self.entry_data['Filename'].get()
+        self.Start_freq = self.entry_data['Start Frequency (MHz)'].get()
+        self.Stop_freq = self.entry_data['Stop Frequency (MHz)'].get()
+        self.G_LNA = self.entry_data['LNA gain (dB)'].get() 
+        self.Lcable = self.entry_data['Cable losses (dB)'].get()
+        self.antennaEfficiency = self.entry_data['Antenna efficiency'].get()
+        print('Path: %s \nFilename: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
        
-   # Plot the calibrated data         
-   tempSpec = np.array(tempSpec, dtype = 'float')
-   print(Length_freq)
-   for i in range(Length_freq):
-       cal.plot_stiched_spectrum(tempSpec[i,:,:],color[i])         
+    def get_data(l):
+        l.append(self.entry.get())
+        print(l)
+        
+    def makeform(self, fields):
+       entries = {}
+       for field in fields:
+           row = Frame(self.window)
+           lab = Label(row, width=22, text=field+": ", anchor='w')
+           ent = Entry(row, width=22)
+           # ent.insert(0,"0")
+           row.pack(side=TOP, fill=X, padx=5, pady=5)
+           lab.pack(side=LEFT)
+           ent.pack(side=RIGHT, expand=NO, fill=X)
+           entries[field] = ent 
+       return entries
+       
+    def cal_data(self):
+       F = []
+       tempCCFData = []
+       tempSpec = []
+       if len(self.Path) == 0:
+           print('Invalid directory defined')
+       else:
+           start_freq = int(self.Start_freq)*1e6
+           stop_freq = int(self.Stop_freq)*1e6
+           Freqlist =cal.generate_CFlist(start_freq,stop_freq)
+           Length_freq = len(Freqlist)
 
+           # Average CCF for each given centre frequency and AcqBW
+           #upperfreq = start_freq + AcqBW/2 
+           #lowerfreq = stop_freq - AcqBW/2
+        # get the spectrum
+           G_LNA = int(self.G_LNA) 
+           Lcable = int(self.Lcable)
+           antennaEfficiency = float(self.antennaEfficiency) 
+           path = self.Path +"_gLNA"+str(G_LNA)+"_Lcable"+str(Lcable)+"_EffAnt"+str(antennaEfficiency)+"/"
+           path = self.Path
+           filename = self.Filename  
+        
+           # Extract the CCF for the correct freqeuncy range and get the raw spectrum data in one array 
+           for i in Freqlist:
+               temp = 0
+               count = 0
+               fileName = filename+str(int(i/1e6))+"MHz.npy"
+               F.append(fileName)
+               for j in range(len(CCFdata)):
+                   upperfreq = i + AcqBW/2 
+                   lowerfreq = i - AcqBW/2
+                   if lowerfreq <= CCFdata[j][0] and upperfreq >= CCFdata[j][0]:
+                       temp = CCFdata[j][1] + temp# Chamber Calibration Factor in dBm
+                       count +=1
+               CCFavg = temp/count
+               tempCCFData.append(CCFavg)
+           F = np.array(F, dtype = 'str')         
+           tempCCFData = np.array(tempCCFData, dtype = 'float')  
+           
+           # Calibrate the raw spectrum
+           for i in range(Length_freq):
+               fileName = F[i]
+               centerFreq = Freqlist[i] #Hz
+               CCF = tempCCFData[i]
+               ReadFile = cal.readIQDataBin(path,fileName)
+               Spec = cal.calCCF(ReadFile, CCF, r, Lcable, G_LNA, antennaEfficiency)
+               tempSpec.append(Spec)
+               
+           # Plot the calibrated data         
+           tempSpec = np.array(tempSpec, dtype = 'float')
+           fig = Figure(figsize=(10,10))
+           fig_plot = fig.add_subplot(111)
+           resfact = 1
+           for i in range(Length_freq):
+               trimspec = np.array(cal.change_freq_channel(cal.trim_spectrum(tempSpec[i,:,:]),resfact))
+                #trimspec = np.array(trim_spectrum(spectrum))
+               spec = cal.to_decibels(trimspec[1])
+               resolution =  0.1069943751528491*resfact
+               fig_plot.plot(trimspec[0]/1e6,spec, c=color[i])
+                #fig_plot.ylim(-80,0)
+               fig_plot.set_ylabel("Power (dBm)")
+               fig_plot.set_xlabel("Frequency (MHz) (resolution %.3f kHz)"%resolution)
+               #cal.plot_stiched_spectrum(tempSpec[i,:,:],color[i])   
+               
+           canvas = FigureCanvasTkAgg(fig, master=self.window)
+           canvas.get_tk_widget().pack(side=BOTTOM, fill=X, padx=5, pady=5)
+           canvas.draw()
+           
 if __name__ == '__main__':
-   my_window = Tk()
-   my_window.wm_title("RFI Chamber")
-   ents = makeform(my_window, fields)
-   my_window.bind('<Return>', (lambda event, e=ents: fetch(e)))
+   window = Tk()
+   start = GUI_set_up(window, fields)
+
                          # The lambda function used here takes one argument, 
                                                                                 # and returns None
-   b1=Button(my_window,text = 'accept', command=(lambda e=ents: fetch(e)))
-   b1.pack(side=LEFT, padx=5, pady=5)
-   #root.bind('<Return>',  cal.plot_stiched_spectrum(Spec,color[1]))
-   #cal_data(data_enter, CCFdata)
-   #root.bind('<Return>', (lambda event, e=ents: fetch(e)))
-   #Spec = cal_data(ents, CCFdata)
-   
-   b2=Button(my_window,text = 'show plot', command=(lambda e=ents: cal_data(e)))
-   b2.pack(side=LEFT, padx=5, pady=5)
+
   # root.bind('<Return>',  cal.plot_stiched_spectrum(Spec,color[1]))
-   my_window.mainloop() 
+   window.mainloop() 
    
