@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Aug 13 14:15:23 2018
-
 @author: G-man
-
 """
 import numpy as np
 from tkinter import *
@@ -18,10 +16,11 @@ from matplotlib.figure import Figure
 from tkinter import dialog as Dialog
 from tkinter import filedialog as LoadFileDialog
 from tkinter import scrolledtext as ScrolledText
+import AcqData as iq
 
 FileCCF="CCF4.csv"
 PathCCF = "D:/Geomarr/Spectrum/"
-fields = 'Path', 'Filename', 'Start Frequency (MHz)', 'Stop Frequency (MHz)', 'LNA gain (dB)', 'Cable losses (dB)', 'Antenna efficiency'
+fields = 'Path', 'Filename', 'Integration Time (sec)', 'Start Frequency (MHz)', 'Stop Frequency (MHz)', 'LNA gain (dB)', 'Cable losses (dB)', 'Antenna efficiency'
 AcqBW = 40e6
 color = ['y','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','rosybrown','cornflowerblue','lavenderblush','cadetblue','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','aliceblue','r','b','m','c','g','y','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','rosybrown','cornflowerblue','lavenderblush','cadetblue','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','aliceblue','r','b','m','c','g','y','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','rosybrown','cornflowerblue','lavenderblush','cadetblue','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','aliceblue','r','b','m','c','g']
 bandwidth = AcqBW #Hz
@@ -38,39 +37,7 @@ CCFdata = cal.readIQDatafileCCF(PathCCF,FileCCF)
 #TEST filename = 0RFISpectrum
 #TEST start_freq = 1000
 #TEST stop_freq = 1040
-class FilenameEntry(Frame):
 
-	def __init__(self, master, text):
-		Frame.__init__(self, master)
-		Label(self, text=text).pack(side=LEFT)
-		self.filename = StringVar()
-		Entry(self, textvariable=self.filename).pack(side=LEFT, fill=X)
-		Button(self, text="Browse...", command=self.browse).pack(side=RIGHT)
-
-	def browse(self):
-		file = LoadFileDialog(self).go(pattern='*')
-		if file:
-			self.filename.set(file)
-
-	def get(self):
-		return self.filename.get()
-
-class ButtonBar(Frame):
-
-	def __init__(self, master, left_button_list, right_button_list):
-		Frame.__init__(self, master, bd=2, relief=SUNKEN)
-		for button, action in left_button_list:
-			Button(self, text=button, command=action).pack(side=LEFT)
-		for button, action in right_button_list:
-			Button(self, text=button, command=action).pack(side=RIGHT)
-
-class FileNotFoundMessage(Dialog):
-
-	def __init__(self, master, filename):
-		Dialog.__init__(self, master, title = 'File not found',
-			text = 'File ' + filename + ' does not exist',
-			bitmap = 'warning', default = 0,
-			strings = ('Cancel',))
 
 class GUI_set_up:
     def __init__(self,  window, fields):
@@ -81,7 +48,10 @@ class GUI_set_up:
         self.G_LNA = 10 
         self.Lcable = -1
         self.antennaEfficiency = 0.75
-        
+        self.integrationTime = 1
+        self.displayResolution = 1
+        self.usecase = 1
+        self.plot_title = 'Power Spectrum'
         self.window = window
         self.window.title("RFI Chamber")
        #self.frame = Frame(window)
@@ -89,21 +59,24 @@ class GUI_set_up:
         self.entry_data = self.makeform(fields)
         self.window.bind('<Return>', (lambda event,e=self.entry_data: self.fetch()))
         #self.label =  Label(self.frame, width=22, text=field+": ", anchor='w')
-        self.button_get = Button(self.window,text = 'accept', command = (lambda e=self.entry_data: self.fetch()))
+        self.button_get = Button(self.window,text = 'Accept', command = (lambda e=self.entry_data: self.fetch()))
         self.button_get.pack(side=LEFT, padx=5, pady=5)
-        self.button_plot=Button(window,text = 'show plot', command=(lambda e=self.entry_data: self.cal_data()))
+        self.button_plot=Button(window,text = 'Plot', command=(lambda e=self.entry_data: self.cal_data()))
         self.button_plot.pack(side=LEFT, padx=5, pady=5)
+        self.figCanvas = Canvas(window, width=100, height=100, bg='pink')
+        self.figCanvas.place(x=0, y=0, )
         
         
     def fetch(self):          
         self.Path= self.entry_data['Path'].get()
         self.Filename = self.entry_data['Filename'].get()
+        self.integrationTime = self.entry_data['Integration Time (sec)'].get()
         self.Start_freq = self.entry_data['Start Frequency (MHz)'].get()
         self.Stop_freq = self.entry_data['Stop Frequency (MHz)'].get()
         self.G_LNA = self.entry_data['LNA gain (dB)'].get() 
         self.Lcable = self.entry_data['Cable losses (dB)'].get()
         self.antennaEfficiency = self.entry_data['Antenna efficiency'].get()
-        print('Path: %s \nFilename: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
+        print('Path: %s \nFilename: %s nIntegration time: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (self.Path, self.Filename, self.integrationTime, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
        
     def get_data(l):
         l.append(self.entry.get())
@@ -112,14 +85,15 @@ class GUI_set_up:
     def makeform(self, fields):
        entries = {}
        for field in fields:
-           row = Frame(self.window)
+           row = Frame(self.window, bg='pink')
            lab = Label(row, width=22, text=field+": ", anchor='w')
            ent = Entry(row, width=22)
            # ent.insert(0,"0")
            row.pack(side=TOP, fill=X, padx=5, pady=5)
-           lab.pack(side=LEFT)
+           lab.pack(side=RIGHT)
            ent.pack(side=RIGHT, expand=NO, fill=X)
            entries[field] = ent 
+
        return entries
        
     def cal_data(self):
@@ -188,16 +162,13 @@ class GUI_set_up:
                #cal.plot_stiched_spectrum(tempSpec[i,:,:],color[i])   
                
            canvas = FigureCanvasTkAgg(fig, master=self.window)
-           canvas.get_tk_widget().pack(side=BOTTOM, fill=X, padx=5, pady=5)
+           canvas.get_tk_widget().place(x=0, y=10)
            canvas.draw()
            
 if __name__ == '__main__':
    window = Tk()
+   window.configure(background='pink')
    start = GUI_set_up(window, fields)
-
-                         # The lambda function used here takes one argument, 
-                                                                                # and returns None
-
-  # root.bind('<Return>',  cal.plot_stiched_spectrum(Spec,color[1]))
+   #iq.acquire_data(start.Start_freq*1e6,start.Stop_freq*1e6,start.integrationTime,start.Path, pathCaldata, start.displayResolution, start.plot_title, start.usecase)
    window.mainloop() 
    
