@@ -246,7 +246,7 @@ def generate_CFlist(startfreq, stopfreq):
     return cfreq_tabelle
 
 def to_decibels(x):
-    calfactor = 1000/50/523392/2                    
+    calfactor = 1000/50/(523392/2)*(523392/2)                    
     return 10*np.log10(x*x*calfactor)
     
 def convertPower2ElecFieldStrength(spectrum): # returns in [dBuV/m]
@@ -424,21 +424,18 @@ def main(min_freq,max_freq,integration_time,path):
     fft.destroy()
     device.disconnect()
         
-def acquire_data(min_freq,max_freq,integration_time,DataPath,DataPath_gLNA,DataPath_Lcable,DataPath_Eff_ant,GPU_integration_time, displayresolution, title = "", useCase=0, color="r"):
+def acquire_data(min_freq,max_freq,integration_time,path, pathCaldata, displayResolution=1, title ="", usecase = 0):
     # usecase:  0 = plain data taking
     #           1 = calibrate data
     #           2 = acquire calibration data
     #           3 = start RFI data
     #           4 = acquire background data
-    _log.setLevel(logging.INFO)
+    GPU_integration_time = 2.0
     device = TektronixDevice()
     batch = int(GPU_integration_time*device.bw/device.buffer_size)
-    
     dump_time = batch*device.buffer_size/device.bw
     _log.info("Setting dump time to %.3f seconds."%(dump_time))
     fft = spectra.FftDetect(device.buffer_size,batch)
-    PathFileName = DataPath+"_gLNA"+str(DataPath_gLNA)+"_Lcable"+str(DataPath_Lcable)+"_EffAnt"+str(DataPath_Eff_ant)+"/ "
-    
     """
     ################################################################
     Start IQ streaming 
@@ -447,21 +444,31 @@ def acquire_data(min_freq,max_freq,integration_time,DataPath,DataPath_gLNA,DataP
     device.run()
     Cfreqlist = generate_CFlist(min_freq,max_freq)
     act_steps =1
+    
     for i in range(len(Cfreqlist)):
         device.set_cfreq(int(Cfreqlist[i]))
-        
         _log.info("Frequency step %i of %i."%(act_steps,len(Cfreqlist)))
         process_stream(device,fft,integration_time)
-        _log.info("DEVICE TRUE BANDWIFDTH %i."%(device.true_bw))
         spectrum = spectra_linear(device,fft)
-        
-        plot_spectrumold(device,fft)
-        plot_stiched_spectrum(spectrum, color, displayresolution)
-        #s = np.array(["True Bandwidth: ", str(device.true_bw), " Buffer size: ", str(device.buffer_size), " Centre frequency: ", str(device.cfreq)])
-        #news = s, spectrum
-        save_spectrum2file(spectrum, PathFileName, "RFISpectrum"+str(int(device.cfreq/1e6)) + "MHz_IntegrationTime_"+str(integration_time)+".npy" )
-        #write_spec2file(spectrum, DataPath,"RFISpectrum"+str(int(device.cfreq/1e6))+ "MHz" )
-        
+        if usecase == 0:
+            plot_stiched_spectrum(spectrum, "k")
+            save_spectrum2file(spectrum, path,"RFISpectrum"+str(int(device.cfreq/1e6))+ "MHz" )
+        if usecase == 1:
+            save_spectrum2file(spectrum, path,"RFISpectrum"+str(int(device.cfreq/1e6))+ "MHz" )
+            plot_stiched_spectrum(calibrateData(spectrum, Cfreqlist[i], path),"r",displayResolution)
+        if path != "" and usecase == 2:
+            plot_stiched_spectrum(spectrum, "k")
+            save_spectrum2file(generate_blanklist(spectrum), path,"BlanckFile"+str(int(device.cfreq/1e6))+ "MHz" )
+            save_spectrum2file(spectrum, path,"50OhmRefSpectrum"+str(int(device.cfreq/1e6))+ "MHz" )
+        if path != "" and usecase == 3:
+            plot_stiched_spectrum(spectrum, "r", displayResolution)
+            save_spectrum2file(spectrum, path,"IntTime_RFISpectrum"+str(int(device.cfreq/1e6))+ "MHz" )
+            # Load Background spectra and plot
+            filename = "Background"+str(int(device.cfreq/1e6))+ "MHz.npy"
+            plot_stiched_spectrum(load_spectrum(pathCaldata, filename), "b",displayResolution)            
+        if path != "" and usecase == 4: #Generates and saves the background spectra
+            plot_stiched_spectrum(spectrum, "c",displayResolution)
+            save_spectrum2file(spectrum, pathCaldata,"Background"+str(int(device.cfreq/1e6))+ "MHz" )
         _log.info("Size of fft mean_spectra: "+ str(np.size(fft)))
         fft.clear()
         act_steps +=1

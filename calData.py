@@ -6,11 +6,11 @@ Created on Tue Mar 13 09:12:13 2018
 """
 
 import numpy as np
-import socket
+#import socket
 import matplotlib.pyplot as plt
 import csv
 #import AcqData
-import logging
+#import logging
 
 
 FileCCF="CCF4.csv"
@@ -190,7 +190,7 @@ if __name__ == '__main__':
                     count +=1
             CCFavg = temp/count
             tempCCFData.append(CCFavg)
-        tempCCFData = np.array(tempCCFData, dtype = 'float')     
+        tempCCFData = np.array(tempCCFData, dtype = 'float32')     
         F = np.array(F, dtype = 'str')     
            
      # calculate  calibrated spectrum and plot ♫
@@ -204,7 +204,7 @@ if __name__ == '__main__':
             plot_stiched_spectrum(Spec,color[i])
             tempSpec.append(Spec)
             
-        tempSpec = np.array(tempSpec, dtype = 'float')
+        tempSpec = np.array(tempSpec, dtype = 'float32')
         for i in range(len(Freqlist)):
             plot_stiched_spectrum(tempSpec[i,:,:],color[i])
     else:
