@@ -1,0 +1,38 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar 12 16:42:11 2018
+
+@author: User
+"""
+
+import os
+import ctypes as c
+import numpy as np
+import math as math
+import matplotlib.pyplot as plt
+import time
+import logging
+from threading import Timer,Event,Lock
+import spectra
+import tektronix_errors
+import AcqData
+
+pathCaldata = "D:/RFIData/Effelsberg/Webcam-DCS7513/20171128/01_KalibrationData_background/" #Path to save the calibration data spectra
+DataPath = "D:/Geomarr/Spectrum/"       #Path to save the spectra
+integrationTime = 1           #integration time in sec
+startFreqMHz = 1000                        #start frequency in MHz
+stopFreqMHz  = 1200            #stop frequency in MHz
+displayResolution = 10             # times 107Hz
+title = "Power Spetrum"
+usecase = 4  # 0 = plain data taking; 1 = calibrate data; 2 = acquire calibration data; 3 = start RFI data; 4 = acquire background data
+GPU_integration_time = 3
+color = "m"
+i = 0
+
+if __name__ == "__main__":
+#    _log.setLevel(logging.INFO) 
+    #main(300e6,320e6,2.00,path)
+    
+    for i in range(0, 3):
+        DataPath = DataPath + str(i)
+        AcqData.acquire_data(startFreqMHz*1e6,stopFreqMHz*1e6,integrationTime,DataPath,GPU_integration_time, pathCaldata, displayResolution, title, usecase, color)

@@ -1,0 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Feb  6 10:43:36 2018
+
+@author: User
+"""
+
+import os
+from ctypes import *
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+import time

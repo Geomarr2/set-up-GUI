@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import time
 import logging
 from threading import Timer,Event,Lock
-import spectra
+#import spectra
 import tektronix_errors
 
 pathCaldata = "D:/RFIData/Effelsberg/Webcam-DCS7513/20171128/01_KalibrationData_background/" #Path to save the calibration data spectra

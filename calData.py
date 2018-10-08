@@ -14,7 +14,7 @@ import csv
 
 
 FileCCF="CCF4.csv"
-PathCCF = "D:/Geomarr/Spectrum/"
+PathCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/"
 filename="RFISpectrum"
 
 AcqBW = 40e6
@@ -27,7 +27,7 @@ Lcable = -1  #dB cable losses
 antennaEfficiency = 0.75 
 r = 1.0  # Distance DUT to receiving antenna
 color = ['y','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','rosybrown','cornflowerblue','lavenderblush','cadetblue','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','aliceblue','r','b','m','c','g','y','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','rosybrown','cornflowerblue','lavenderblush','cadetblue','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','aliceblue','r','b','m','c','g','y','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','rosybrown','cornflowerblue','lavenderblush','cadetblue','hotpink','olive','coral','darkkhaki','orchid','lightblue','navy','aliceblue','r','b','m','c','g']
-path = "D:/Geomarr/Spectrum"+"_gLNA"+str(G_LNA)+"_Lcable"+str(Lcable)+"_EffAnt"+str(antennaEfficiency)+"/"
+path = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum"+"_gLNA"+str(G_LNA)+"_Lcable"+str(Lcable)+"_EffAnt"+str(antennaEfficiency)+"/"
 #path = "D:/RFIData/test_geomarr/"
 resolution = 1
 integrationTime = 1           #integration time in sec
@@ -36,7 +36,7 @@ usecase = 0  # 0 = plain data taking; 1 = calibrate data; 2 = acquire calibratio
 GPU_integration_time = 3
 c = 'm'
 
-def readIQDatafileCCF(path, filename):
+def readIQDatafileCSV(path, filename):
     data = []
     with open(path+filename, "r") as filedata:
         csvdata = csv.reader(filedata, delimiter = ',')
@@ -106,11 +106,10 @@ def change_freq_channel(spectrum, factor):
     return outputfreqlist, outputspeclist
     
 def to_decibels(x):
-    calfactor = 1000/50/523392/2                    
+    calfactor = 1000/50/523392/2 
     return 10*np.log10(x*x*calfactor)
     
-def trim_spectrum(spectrum):
-    final_sample= 373852
+def trim_spectrum(spectrum, final_sample = 373852):
     specsize=len(spectrum[0])
 #    _log.info("Usable number of Samples: %i "%(final_sample))
     starttrim = int((specsize-final_sample)/2) 

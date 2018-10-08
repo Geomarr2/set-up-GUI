@@ -1,0 +1,12 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Feb 14 14:27:02 2018
+
+@author: User
+"""
+
+def hello(to=__name__):
+    return "hello, %s" % to
+
+if __name__ == "__main__":
+    print hello("world")
