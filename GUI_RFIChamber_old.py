@@ -69,21 +69,14 @@ class NavSelectToolbar(NavigationToolbar2TkAgg):
 
 class GUI_set_up:
     def __init__(self,  window, fields):
-        # user input
-        self.DirPath= "C:/Users/geomarr/Documents/GitHub/set-up-GUI/GUIData/"
-        # data header
+        self.Path= "C:/Users/geomarr/Documents/GitHub/set-up-GUI/GUIData/"
         self.Filename = "Spectrum_"
-        self.CenterFrequency = 1020*1e6                                         # float (Hz)
-        self.Bandwidth = 40*1e6                                                 # float (Hz)
-        self.Nsample = 373851                                                   # int -- fft's number of channels
-        self.frequencySpacing = 0                                               # 0 -- uniform and then frequency given 1 -- other frequency given
-        self.integration_time = 1                                               # float mmseconds
-        self.Scannumber = 11111                                                 # unique scan number 
-        self.AcquisitionSystem = ''                                             # string 
-        self.Antennacalib = '0.75'                                              # Antenna Efficiency
-        self.Cablecalib = ''
-#        self.
-        
+        self.CenterFrequency = 1020*1e6
+        self.Bandwidth = 40*1e6
+        self.Nchannels = 373851
+        self.G_LNA = 39 
+        self.Lcable = -1
+        self.antennaEfficiency = 0.75
         self.window = window
         self.x_factor = 20
         self.window.title("RFI Chamber")
@@ -96,12 +89,11 @@ class GUI_set_up:
         self.fig_plot = self.figure.add_subplot(111)
         self.get_size_plot = self.figure.get_axes()
         self.toolbar = NavSelectToolbar(self.canvas,self.window,self)
-    #    self.printzoom = self.toolbar.zoom.__get__.__get__
         self.toolbar.update()
 #        self.CCFdata = self.get_CCF(AcqBW)
         self.GainCircuitData = self.readIQDatafileCSV(PathGainCircuit,FileGainCircuit)
         window.bind('<Return>', (lambda event,e=self.entry_data: self.fetch()))
-        button_get = Button(self.window,text = 'accept', command = (lambda e=self.entry_data: self.userInputfetch()))
+        button_get = Button(self.window,text = 'accept', command = (lambda e=self.entry_data: self.fetch()))
         button_get.place(x = 10, y = 220)
         button_get.pack()
         button_plot=Button(window,text = 'show plot', command=(lambda e=self.entry_data: self.calibrateData()))
@@ -111,8 +103,8 @@ class GUI_set_up:
         button_plot_clear.place(x = 130, y = 220)
         button_plot_clear.pack()
         
-    def userInputfetch(self):          
-        self.DirPath= self.entry_data['Path'].get()
+    def fetch(self):          
+        self.Path= self.entry_data['Path'].get()
         self.Filename = self.entry_data['Filename'].get()
         self.Start_freq = self.entry_data['Start Frequency (MHz)'].get()
         self.Stop_freq = self.entry_data['Stop Frequency (MHz)'].get()
@@ -158,8 +150,8 @@ class GUI_set_up:
        
     def get_CCF(self): 
        CCFdata = self.readIQDatafileCSV(PathCCF,FileCCF)
-       upperfreq = self.Stop_freq*1e6
-       lowerfreq = self.Start_freq*1e6
+       upperfreq = self.CenterFrequency + self.Bandwidth/2 
+       lowerfreq =self.CenterFrequency - self.Bandwidth/2
        temp_spec = np.array([], dtype=np.float32)
        temp = 0
        for j in range(len(CCFdata)):
@@ -245,9 +237,9 @@ class GUI_set_up:
         #res = self.true_BW/self.Nsample
 # set the display sample size depending on the display bandwidth and resolution 
         new_resolution = 100e3
-        array_size = int(self.workable_BW/new_resolution)
-        Freqlist =cal.generate_CFlist(int(self.Start_freq)*1e6,int(self.Stop_freq)*1e6)
-        
+        array_size = 40
+        Freqlist =cal.generate_CFlist(int(Start_freq),int(Stop_freq))
+        print(Freqlist)
         for i in Freqlist: # i = 40 Mhz range
             filename = self.Filename+str(i/1e6)+"MHz.npy"
             spectrum_temp = np.load(path + filename)
@@ -258,7 +250,7 @@ class GUI_set_up:
             for i in range(array_size):
                 temp_spec = np.max(spectrum[i*x:x*(i+1)])
                 spec = np.append(spec, temp_spec)
-        freq = np.linspace(self.Start_freq,self.Stop_freq,array_size)*1e6
+        freq = np.linspace(Start_freq,Stop_freq,array_size)
         temp = freq,spec
         y = np.array(temp, dtype=np.float32)
         return y
@@ -300,8 +292,8 @@ class GUI_set_up:
 #           minSpec = min(temp_minSpec)
 #           self.fig_plot.axis([int(self.Start_freq),int(self.Stop_freq), minSpec-self.x_factor, maxSpec+self.x_factor])
            self.fig_plot.set_ylabel("Electrical Field Strength [dBuV/m]")#('Power [dBm]')
-           self.fig_plot.set_xlabel("Frequency (MHz) (resolution %.3f kHz)"%self.resolution)
-           print('Path: %s \nFilename: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
+           self.fig_plot.set_xlabel("Frequency (MHz) (resolution %.3f kHz)"%1)
+#           print('Path: %s \nFilename: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
            self.canvas.draw()
                    #tempfreq = Spec[:,0]/1e6
                    #temp = Spec[:,1]
