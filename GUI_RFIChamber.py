@@ -3,21 +3,33 @@
 Created on Mon Aug 13 14:15:23 2018
 @author: G-man
 """
+try:
+    # Python2
+    from Tkinter import * 
+except ImportError:
+    # Python3
+    from tkinter import *
 import matplotlib
 matplotlib.use('cairo')
 from IPython import get_ipython
 get_ipython().magic('reset -sf')
-
 import numpy as np
 from io import StringIO
-from tkinter import *
 global fields 
 import calData as cal
 import os
 import pandas as pd
 import sys
 import time
+from tkinter import *
 from scipy.interpolate import spline
+from tkinter import messagebox as tkMessageBox
+from tkinter import filedialog as tkFileDialog
+import matplotlib as mpl
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.widgets import Lasso
+from PIL import ImageTk,Image
+import re
 #import matplotlib as plt
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
@@ -27,14 +39,16 @@ FileCCF="CCF4.csv"
 PathCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/"
 PathGainCircuit = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/RFIChamberMeasure/RFcable/"
 FileGainCircuit = "GainCircuit.csv"
-fields = 'Path', 'Filename', 'Start Frequency (MHz)', 'Stop Frequency (MHz)', 'LNA gain (dB)', 'Cable losses (dB)', 'Antenna efficiency', 'Set x axes scaling factor', 'Workable bandwidth (MHz)','True bandwidth (MHz)'
+fields = 'Path', 'Filename', 'Start Frequency (MHz)', 'Stop Frequency (MHz)', 'LNA gain (dB)', 'Cable losses (dB)','Antenna efficiency'
+fields_freq = "Start Frequency (MHz): ", "Stop Frequency (MHz): "
 AcqBW = 40e6
 color = ['y','hotpink','olive','coral','r','b','m','c','g']
+
 bandwidth = AcqBW #Hz
 #StartFreq = 1000e6
 #StopFreq = 1200e6
 Z0 = 119.9169832 * np.pi  # Impedance of freespace
-#G_LNA= 20 #dB gain of the LNA
+G_LNA= 20 #dB gain of the LNA
 #Lcable = -1  #dB cable losses
 #antennaEfficiency = 0.75 
 Nsample = 523852
@@ -45,9 +59,35 @@ r = 1
 #TEST start_freq = 1000
 #TEST stop_freq = 1040
 
+#---------Plotting constants------#
+DEFAULT_XAXIS   = "P_bary (ms)"
+DEFAULT_YAXIS   = "Sigma"
+BESTPROF_DTYPE  = [
+    ("Text files","*.txt"),("all files","*.*")
+    ]
+PLOTABLE_FIELDS = [key for key,dtype in BESTPROF_DTYPE if dtype=="float32"]
+PLOT_SIZE = (8,5)
+MPL_STYLE = {
+    "text.color":"lightblue",
+    "axes.labelcolor":"lightblue",
+    "axes.edgecolor":"black",
+    "axes.facecolor":"0.4",
+    "xtick.color": "lightblue",
+    "ytick.color": "lightblue",
+    "figure.facecolor":"black",
+    "figure.edgecolor":"black",
+    "text.usetex":False
+}
+mpl.rcParams.update(MPL_STYLE)
+
+#-----------Misc.-------------#
+DEFAULT_DIRECTORY = os.getcwd()
+
 #----------Style options---------#
-DEFAULT_PALETTE = {"foreground":"lightblue","background":"black"}
+DEFAULT_PALETTE = {"foreground":"blue","background":"lightblue"}
 DEFAULT_STYLE_1 = {"foreground":"black","background":"lightblue"}
+DEFAULT_STYLE_2 = {"foreground":"gray90","background":"darkgreen"}
+DEFAULT_STYLE_3 = {"foreground":"gray90","background":"darkred"}
 
 class NavSelectToolbar(NavigationToolbar2TkAgg): 
     def __init__(self, canvas,root,parent):
@@ -55,7 +95,7 @@ class NavSelectToolbar(NavigationToolbar2TkAgg):
         self.root   = root
         self.parent = parent
         NavigationToolbar2TkAgg.__init__(self, canvas,root)
-        self._zoomrect_default=NavigationToolbar2TkAgg.zoom
+        #self._zoomrect_default=NavigationToolbar2TkAgg.zoom
         
         self.lasso_button = self._custom_button(text="lasso",command=lambda: self.lasso(
                 lambda inds: self.parent.multi_select_callback(inds),"lasso"),**DEFAULT_STYLE_1)
@@ -69,7 +109,39 @@ class NavSelectToolbar(NavigationToolbar2TkAgg):
     
 
 class GUI_set_up:
-    def __init__(self,  window, fields):
+    def __init__(self, root):     
+        self.root = root
+        self.fields = fields
+        self.x_factor = 20
+        self.root.title("RFI Chamber")
+        self.top_frame = Frame(self.root)
+        self.top_frame.pack(side=RIGHT)
+        
+        self.top_frame_plot = Frame(self.root)
+        self.top_frame_plot.pack(side=LEFT)
+        self.plot_frame_toolbar = Frame(self.top_frame_plot)
+        self.plot_frame_toolbar.pack(side=TOP)
+        self.plot_frame = Frame(self.top_frame_plot)
+        self.plot_frame.pack(side=TOP)
+        
+        self.input_frame = Frame(self.top_frame)
+        self.input_frame.pack(side=TOP)
+        self.buttons_frame = Frame(self.input_frame)
+        self.buttons_frame.pack(side=RIGHT)
+        self.dir_button_frame = Frame(self.top_frame)
+        self.dir_button_frame.pack(side=BOTTOM)
+        self.newRBW_button_frame = Frame(self.top_frame)
+        self.newRBW_button_frame.pack(side=BOTTOM)
+        
+        self.options_frame = Frame(self.top_frame) 
+        self.options_frame.pack(side=LEFT)
+        self.options    = GUIOptions(self.options_frame,self)
+        self.options.plot()
+        
+class GUIOptions(object):
+    def __init__(self,root,parent):
+        self.root = root
+        self.parent = parent
         self.Path= "C:/Users/geomarr/Documents/GitHub/set-up-GUI/GUIData/"
         self.Filename = "Spectrum_"
         self.CenterFrequency = 1020*1e6
@@ -78,46 +150,268 @@ class GUI_set_up:
         self.G_LNA = 39 
         self.Lcable = -1
         self.antennaEfficiency = 0.75
-        self.window = window
-        self.x_factor = 20
-        self.window.title("RFI Chamber")
+        self.data = None
+        self.Start_freq=0
+        self.Stop_freq=0
+        self.scaling_factor=5000           # number of points full data set
         
-        self.entry_data = self.makeform(fields)
-        self.figure = Figure(figsize=(10,10))
-        self.canvas = FigureCanvasTkAgg(self.figure, master=self.window)
-        self.canvas.get_tk_widget().place(x = 10, y = 250, width = 250, height = 250)
-        self.canvas.get_tk_widget().pack(side=BOTTOM, fill=X, padx=5, pady=5)
-        self.fig_plot = self.figure.add_subplot(111)
-        self.get_size_plot = self.figure.get_axes()
-        self.toolbar = NavSelectToolbar(self.canvas,self.window,self)
-        self.toolbar.update()
+        self.zoom_data = None
+        self.zoom_Start_freq=0
+        self.zoom_Stop_freq=0
+        self.zoom_trigger = False
+        self.original = False
+        
+        self.mode_select_frame = Frame(self.root,pady=20)
+        self.mode_select_frame.pack(side=TOP,fill=X,expand=1)
+        self.ax_opts_frame = Frame(self.root)
+        self.ax_opts_frame.pack(side=TOP,expand=1)
+        self.view_toggle_frame = Frame(self.root,pady=20)
+        self.view_toggle_frame.pack(side=TOP,fill=X,expand=1)
+        
+        self.entry_data = self.makeform()
+        self.newRWB_entry_data = self.new_res_BW()
+        self.canvas = None
+        self.figure = None
+        self.fig_plot = None
+        self.toolbar = None
+        
+        
 #        self.CCFdata = self.get_CCF(AcqBW)
         self.GainCircuitData = self.readIQDatafileCSV(PathGainCircuit,FileGainCircuit)
-        window.bind('<Return>', (lambda event,e=self.entry_data: self.fetch()))
-        button_get = Button(self.window,text = 'accept', command = (lambda e=self.entry_data: self.fetch()))
-        button_get.place(x = 10, y = 220)
-        button_get.pack()
-        button_plot=Button(window,text = 'show plot', command=(lambda e=self.entry_data: self.calibrateData()))
-        button_plot.place(x = 60, y = 220)
-        button_plot.pack()
-        button_plot_clear=Button(window,text = 'clear plot', command=(lambda e=self.entry_data: self.clear_data()))
-        button_plot_clear.place(x = 130, y = 220)
-        button_plot_clear.pack()
+        root.bind('<Return>', (lambda event,e=self.entry_data: self.fetch()))
         
+        self.top_frame = Frame(self.parent.dir_button_frame)
+        self.top_frame.pack(side=TOP,anchor=W)
+        
+        self.bottom_frame = Frame(self.parent.dir_button_frame)
+        self.bottom_frame.pack(side=BOTTOM,fill=BOTH,expand=1)
+        Label(self.top_frame,text="Directory:",padx=8,pady=2,height=1).pack(side=LEFT,anchor=W)
+        self.directory_entry = Entry(self.top_frame,width=90,bg="lightblue",
+                                    fg="black",highlightcolor="lightblue",insertbackground="black",
+                                    highlightthickness=2)
+        
+        self.directory_entry.pack(side=LEFT,fill=BOTH,expand=1,anchor=W)
+        self.directory_entry.insert(0,DEFAULT_DIRECTORY)
+        Button(self.top_frame,text="Browse",command=self.launch_dir_finder,**DEFAULT_STYLE_1
+                  ).pack(side=LEFT,fill=BOTH,expand=1,anchor=W)
+        self.submit_button = Button(self.bottom_frame,text="Load Data",width=60,
+                                       command=self.load_data,
+                                       **DEFAULT_STYLE_2).pack(side=BOTTOM,fill=BOTH,expand=1,anchor=CENTER)
+        
+        # button to get new BW of the display resolution 
+        self.newRBW_opts_frame = Frame(self.parent.newRBW_button_frame,pady=1)
+        
+        self.newRBW_opts_frame.pack(side=RIGHT,fill=BOTH,expand=1)
+        self.show_newRBW_button=self._custom_button(
+                self.newRBW_opts_frame,text = 'Replot', 
+                command=(lambda e=self.newRWB_entry_data: self.zoom_act()),
+                **DEFAULT_STYLE_2)
+        
+        self.fetch_opts_frame = Frame(self.parent.buttons_frame,pady=1)
+        self.fetch_opts_frame.pack(side=TOP,fill=X,expand=1)
+        self.button_fetch = self._custom_button(
+                self.fetch_opts_frame,'Accept',
+                command = (lambda e=self.entry_data: self.fetch()),
+                **DEFAULT_STYLE_2)
+        
+        self.clear_opts_frame = Frame(self.parent.buttons_frame,pady=1)
+        self.clear_opts_frame.pack(side=TOP,fill=X,expand=1)
+        self.clear_button=self._custom_button(
+                self.clear_opts_frame,text = 'Clear Plot', 
+                command=(lambda e=self.entry_data: self.clear_data()),
+                **DEFAULT_STYLE_2)
+        
+        # button to show plot
+        self.plot_opts_frame = Frame(self.parent.buttons_frame,pady=1)
+        self.plot_opts_frame.pack(side=TOP,fill=X,expand=1)
+        self.show_plot_button=self._custom_button(
+                self.plot_opts_frame,text = 'Show Plot', 
+                command=(lambda e=self.entry_data: self.calibrateData(self.fig_plot,self.canvas)),
+                **DEFAULT_STYLE_2)
+        
+        self.misc_opts_frame = Frame(self.parent.buttons_frame,pady=1)
+        self.misc_opts_frame.pack(side=TOP,fill=X,expand=1)
+        self.quit_button = self._custom_button(
+        self.misc_opts_frame,"Quit",
+        self.quit,**DEFAULT_STYLE_3)
+        
+             
+    def plot(self):
+        self.figure = Figure(figsize=(10,10))
+        self.fig_plot = self.figure.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.parent.top_frame_plot)
+        self.canvas.get_tk_widget().pack(side=BOTTOM, fill=X, padx=5, pady=5)
+        self.fig_plot = self.figure.add_subplot(111)
+        self.toolbar = NavSelectToolbar(self.canvas,self.parent.top_frame_plot,self)
+        self.toolbar.update()
+
+    def zoom_act(self):
+        self.zoom_Start_freq = float(self.newRWB_entry_data["Start Frequency (MHz): "].get())*1e6
+        self.zoom_Stop_freq = float(self.newRWB_entry_data["Stop Frequency (MHz): "].get())*1e6
+        self.zoom_trigger = True
+        print("New displayed start frequency (MHz): %s"%self.zoom_Start_freq )
+        print("New displayed stop frequency (MHz): %s"%self.zoom_Stop_freq)
+        Bandwidth = self.Stop_freq - self.Start_freq
+        print("True bandwidth: %s"%Bandwidth)
+        zoom_Bandwidth = self.zoom_Stop_freq - self.zoom_Start_freq
+        print("Zoom bandwidth: %s"%zoom_Bandwidth)
+        self.clear_plot()
+        print(self.data)
+        if zoom_Bandwidth >= Bandwidth/2:
+            self.scaling_factor = int(len(self.data)/((Bandwidth/2)/1e6))
+            print('Bandwidth/2 and scaling factor: %f' %(self.scaling_factor))
+        elif zoom_Bandwidth <= Bandwidth/2 and zoom_Bandwidth >= Bandwidth/3:
+            self.scaling_factor = int(len(self.data)/((Bandwidth/3)/1e6))
+            print('Bandwidth/3 and scaling factor: %f' %(self.scaling_factor))
+        elif zoom_Bandwidth <= Bandwidth/3 and zoom_Bandwidth >= Bandwidth/4:
+            self.scaling_factor = int(len(self.data)/((Bandwidth/4)/1e6))
+            print('Bandwidth/4 and scaling factor: %f' %(self.scaling_factor))
+        elif zoom_Bandwidth <= Bandwidth/4 and zoom_Bandwidth >= Bandwidth/5:
+            self.scaling_factor = int(len(self.data)/((Bandwidth/5)/1e6))
+            print('Bandwidth/5 and scaling factor: %f' %(self.scaling_factor))
+        elif zoom_Bandwidth <= 40*1e6:
+            self.scaling_factor = len(self.data)
+            print('40MHz and scaling factor: %f' %(self.scaling_factor))
+            self.original = True
+        self.plot_data(self.data)    
+        
+        
+    def plot_data(self,data):
+        reduced_data = self.read_reduce_Data_use(data) 
+        max_plot, = self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[1], color=color[0])
+        min_plot, = self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[2], color=color[1])
+        mean_plot, = self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[3], color=color[2])
+        self.fig_plot.legend([max_plot,min_plot,mean_plot],['max', 'min', 'mean'])
+        if self.zoom_trigger == True:
+            if self.original == True:
+                self.fig_plot.set_ylim(np.min(reduced_data[2]),np.max(reduced_data[1]))
+                self.original = False   
+            else:
+                self.fig_plot.set_ylim(np.min(reduced_data[2])-10,np.max(reduced_data[1])+10)
+            self.fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
+            self.zoom_trigger = False                
+        else:
+            self.fig_plot.set_xlim(self.Start_freq/1e6,self.Stop_freq/1e6)
+            self.fig_plot.set_ylim(np.min(reduced_data[2])-30,np.max(reduced_data[1])+30)
+        self.canvas.draw()
+        
+    def read_reduce_Data_use(self,spectrum):
+        # read in the whole BW in one array
+        spec_mean = np.array([])
+        spec_min = np.array([])
+        spec_max = np.array([])
+        freq = np.array([])
+# set the display sample size depending on the display bandwidth and resolution         
+        x = int(len(spectrum)/self.scaling_factor)
+        for i in range(self.scaling_factor): 
+            
+            temp_spec_max = np.max(spectrum[i*x:x*(i+1)])
+            spec_max = np.append(spec_max, temp_spec_max)
+               
+            temp_spec_mean = np.mean(spectrum[i*x:x*(i+1)])
+            spec_mean = np.append(spec_mean, temp_spec_mean)
+                
+            temp_spec_min = np.min(spectrum[i*x:x*(i+1)])
+            spec_min = np.append(spec_min, temp_spec_min)
+                
+        freq = np.linspace(self.Start_freq,self.Stop_freq,len(spec_max))
+        temp = freq,spec_max,spec_min,spec_mean
+        data = np.array(temp, dtype=np.float32)
+        return data        
+    
+    def clear_plot(self):
+        self.canvas.get_tk_widget().destroy()
+        self.toolbar.destroy()
+        self.canvas = None
+        self.plot()
+        
+    def clear_data(self):
+        answer = tkMessageBox.askyesno(title="Clear Plot and Data", message="Are you sure you want to clear the loaded data?")
+        if (answer):
+            self.data = None
+            tkMessageBox.showwarning(title="Clear Plot and Data", message="Data has been deleted.")
+            self.clear_plot()
+            
+    def new_res_BW(self):
+        entries = {}
+        for field in fields_freq:
+            row = Frame(self.parent.newRBW_button_frame)
+            lab = Label(row, width=22, text=field, anchor='w')
+            ent = Entry(row, width=22)
+            row.pack(side=TOP, fill=X, padx=5, pady=5)
+            lab.pack(side=LEFT)
+            ent.pack(side=RIGHT, expand=NO, fill=X)
+            entries[field] = ent
+            print(ent)
+        return entries
+        
+    # confirm clearing data
+    def confirmClearData(self):
+        answer = tkMessageBox.askyesno(title="Clear data", message="Are you sure you want to clear the loaded data?")
+        if (answer):
+            self.data = None
+            tkMessageBox.showwarning(title="Clear data", message="Data has been deleted.")
+            
+    def load_data(self):
+        
+        spec = np.array([])
+        freq = np.array([])
+        new_path = np.array([])
+        path = self.directory_entry.get()
+        path.replace("\\","/") + "/"
+        new_path = path.split(' ')
+#        Freqlist =cal.generate_CFlist(int(Start_freq),int(Stop_freq))
+        center_freq_temp = []
+        for i in range(len(new_path)): # i = 40 Mhz range
+            CenterFrequency = re.findall("\d+", new_path[i])#re.search(r'\f+',new_path[i]).group()
+       #     filename = self.Filename+str(i/1e6)+"MHz.npy"
+            spectrum_temp = np.load(new_path[i])
+       #     freq =  spectrum_temp[:,0].T*1e6
+            spectrum =  spectrum_temp[:,1].T
+            spec = np.append(spec, spectrum)
+            center_freq_temp.append(float(CenterFrequency[0])*1e6)
+            
+#        Bandwidth = max(center_freq_temp)-min(center_freq_temp)
+        self.Stop_freq = max(center_freq_temp) + self.Bandwidth/2
+        self.Start_freq = min(center_freq_temp) - self.Bandwidth/2    
+        print('Start freqeuncy (Hz): %f \nStop freqeuncy (Hz): %f'%(self.Start_freq, self.Stop_freq))
+       # freq = np.linspace(self.Start_freq,self.Stop_freq,len(spectrum)*len(new_path))
+       # temp = freq,spec
+        self.data = np.array(spec, dtype=np.float32)                            # not reduced data
+        self.plot_data(self.data)
+        
+        
+    def launch_dir_finder(self):
+        #directory = tkFileDialog.askdirectory()
+        files = tkFileDialog.askopenfilenames()
+        self.directory_entry.delete(0,END)
+        self.directory_entry.insert(0,files)
+        
+    def _custom_button(self,root,text,command,**kwargs):
+        button = Button(root, text=text,
+            command=command,padx=2, pady=2,height=1, width=10,**kwargs)
+        button.pack(side=TOP,fill=BOTH)
+        return button
+    
+    def quit(self):
+        msg = "Quitting:\nUnsaved progress will be lost.\nDo you wish to Continue?"
+        if tkMessageBox.askokcancel("Combustible Lemon",msg):
+            self.parent.root.destroy()    
+            
     def fetch(self):          
         self.Path= self.entry_data['Path'].get()
         self.Filename = self.entry_data['Filename'].get()
-        self.Start_freq = self.entry_data['Start Frequency (MHz)'].get()
-        self.Stop_freq = self.entry_data['Stop Frequency (MHz)'].get()
+        self.Start_freq = self.entry_data['Start Frequency (Hz)'].get()
+        self.Stop_freq = self.entry_data['Stop Frequency (Hz)'].get()
         self.G_LNA = self.entry_data['LNA gain (dB)'].get() 
         self.Lcable = self.entry_data['Cable losses (dB)'].get()
         self.antennaEfficiency = self.entry_data['Antenna efficiency'].get()
         self.get_x_factor = self.entry_data['Set x axes scaling factor'].get()
-        temp_workable_BW = self.entry_data['Workable bandwidth (MHz)'].get()
-        temp_true_BW = self.entry_data['True bandwidth (MHz)'].get()
-        self.workable_BW = float(temp_workable_BW)*1e6
-        self.true_BW = float(temp_true_BW)*1e6
-        
+        #self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)
+        for field in fields: 
+            print(field+': %s \n' % (self.entry_data[field].get()))
+        #    print(field': %s \n' % (self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
+           
     def get_data(l):
         l.append(self.entry.get())
         print(l)
@@ -131,15 +425,11 @@ class GUI_set_up:
             filedata.close()
             data =np.array(data, dtype = 'float')    
         return data
-        
-    def clear_data(self):
-        self.canvas.get_tk_widget().delete("all")
-        self.fig_plot.clear()
-        
-    def makeform(self, fields):
+
+    def makeform(self):
        entries = {}
        for field in fields:
-           row = Frame(self.window)
+           row = Frame(self.parent.input_frame)
            lab = Label(row, width=22, text=field+": ", anchor='w')
            ent = Entry(row, width=22)
            # ent.insert(0,"0")
@@ -147,12 +437,13 @@ class GUI_set_up:
            lab.pack(side=LEFT)
            ent.pack(side=RIGHT, expand=NO, fill=X)
            entries[field] = ent 
+           print(field+': %s \n' % (entries[field].get()))
        return entries
        
     def get_CCF(self): 
        CCFdata = self.readIQDatafileCSV(PathCCF,FileCCF)
-       upperfreq = self.Stop_freq*1e6
-       lowerfreq = self.Start_freq*1e6
+       upperfreq = self.CenterFrequency + self.Bandwidth/2 
+       lowerfreq =self.CenterFrequency - self.Bandwidth/2
        temp_spec = np.array([], dtype=np.float32)
        temp = 0
        for j in range(len(CCFdata)):
@@ -181,42 +472,7 @@ class GUI_set_up:
                    temp = self.GainCircuitData[j,1] 
                    temp_gain = np.append(temp_gain, temp)
        return (temp_gain.T).astype('float32') 
-   
-    def read_reduced_Data(self, path, filename, start_freq, stop_freq, array_size = 40, resfact=1):
-        # 40 MHz kom hier in
-        temp_spec = np.array([])
-        temp_freq = np.array([])
-        spectrum =np.load(path + filename)
-        x = int(len(spectrum)/array_size)
-        for i in range(int(array_size)):
-        #trimspec = np.array(self.change_freq_channel(self.trim_spectrum(spectrum),resfact))
-            temp = np.max(spectrum[i*x:x*(i+1),1])
-            tempfreq = np.mean(spectrum[i*x:x*(i+1),0])
-            temp_spec = np.append(temp_spec, temp)
-            temp_freq = np.append(temp_freq, tempfreq)
-        temp = temp_freq, temp_spec
-        y = np.array(temp, dtype=np.float32)
-        return y
-    
-    def reduced_Data(self,spectrum, array_size = 40, resfact=1):
-        # 40 MHz kom hier in
-        # array size is the number of point one batch of data point should be
-        spectrum 
-        temp_spec = np.array([])
-        temp_freq = np.array([])
-        # number of samples
-        nr_smp = int(((self.Stop_freq*1e6-self.Start_freq*1e6)/self.workable_BW)*array_size)
-        
-        x = int(len(spectrum)/nr_smp)
-        for i in range(nr_smp):
-        #trimspec = np.array(self.change_freq_channel(self.trim_spectrum(spectrum),resfact))
-            temp = np.mean(spectrum[i*x:x*(i+1),1])
-            tempfreq = np.mean(spectrum[i*x:x*(i+1),0])
-            temp_spec = np.append(temp_spec, temp)
-            temp_freq = np.append(temp_freq, tempfreq)
-        temp = temp_freq, temp_spec
-        y = np.array(temp, dtype=np.float32)
-        return y
+
     def get_x(self):
         # GET X AXIS VALUES (MAX AND MIN) FROM ZOOM????????
         #display_BW = X_max - X_min self.Stop_freq*1e6-self.Start_freq*1e6
@@ -228,6 +484,8 @@ class GUI_set_up:
             # set full resolution
             array_size = int(self.workable_BW/self.resolution)
 
+
+    
     def read_reduce_Data(self):
         # read in the whole BW in one array
         spec = np.array([])
@@ -238,9 +496,9 @@ class GUI_set_up:
         #res = self.true_BW/self.Nsample
 # set the display sample size depending on the display bandwidth and resolution 
         new_resolution = 100e3
-        array_size = int(self.workable_BW/new_resolution)
-        Freqlist =cal.generate_CFlist(int(self.Start_freq)*1e6,int(self.Stop_freq)*1e6)
-        
+        array_size = 40
+        Freqlist =cal.generate_CFlist(int(Start_freq),int(Stop_freq))
+        print(Freqlist)
         for i in Freqlist: # i = 40 Mhz range
             filename = self.Filename+str(i/1e6)+"MHz.npy"
             spectrum_temp = np.load(path + filename)
@@ -251,7 +509,7 @@ class GUI_set_up:
             for i in range(array_size):
                 temp_spec = np.max(spectrum[i*x:x*(i+1)])
                 spec = np.append(spec, temp_spec)
-        freq = np.linspace(self.Start_freq,self.Stop_freq,array_size)*1e6
+        freq = np.linspace(Start_freq,Stop_freq,array_size)
         temp = freq,spec
         y = np.array(temp, dtype=np.float32)
         return y
@@ -266,36 +524,36 @@ class GUI_set_up:
          temp = -G_LNA - Lcable - (10.0 * np.log10(antennaEfficiency)) - CCF + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0
          
          return spectrum[0], spectrum[1]+temp
-               
-       
-    def calibrateData(self):
+     
+    def calibrateData(self,fig_plot,canvas):
        tstart = time.time()
        temp_maxSpec = []
        temp_minSpec = []
        if len(self.entry_data) == 0:
            print('Invalid directory defined')
        else:
-           G_LNA = int(self.G_LNA) 
-           G_LNA = self.cal_GainCircuit()
-           Lcable = int(self.Lcable)
-           antennaEfficiency = np.float32(self.antennaEfficiency) 
+#           G_LNA = int(self.G_LNA) 
+ #          G_LNA = self.cal_GainCircuit()
+ #          Lcable = int(self.Lcable)
+#           antennaEfficiency = np.float32(self.antennaEfficiency) 
            spectrum = self.read_reduce_Data()
            #spec = self.reduced_Data(spectrum_whole_bw,40)
            #smooth_spectrum_whole_bw = smooth(spectrum_whole_bw[1])
            CCF = self.get_CCF()
+           
            #Spec = self.calCCF(spec, CCF, r, int(Lcable), G_LNA, float(antennaEfficiency))
            #temp_maxSpec.append(max(Spec[1]))
            #temp_minSpec.append(min(Spec[1]))
-           cal_spec = self.fig_plot.plot(spectrum[0]/1e6,spectrum[1], color=color[0])#,label = 'Calibarted data')
+           cal_spec = fig_plot.plot(spectrum[0]/1e6,spectrum[1], color=color[0])#,label = 'Calibarted data')
            #raw_spec, = self.fig_plot.plot(spec[0]/1e6,spec[1], color=color[1],label='Raw data')
            #self.fig_plot.legend()#([cal_spec,raw_spec],['Calibarted data', 'Raw data'])
 #           maxSpec = max(temp_maxSpec)
 #           minSpec = min(temp_minSpec)
 #           self.fig_plot.axis([int(self.Start_freq),int(self.Stop_freq), minSpec-self.x_factor, maxSpec+self.x_factor])
-           self.fig_plot.set_ylabel("Electrical Field Strength [dBuV/m]")#('Power [dBm]')
-           self.fig_plot.set_xlabel("Frequency (MHz) (resolution %.3f kHz)"%self.resolution)
-           print('Path: %s \nFilename: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
-           self.canvas.draw()
+           fig_plot.set_ylabel("Electrical Field Strength [dBuV/m]")#('Power [dBm]')
+           fig_plot.set_xlabel("Frequency (MHz) (resolution %.3f kHz)"%1)
+#           print('Path: %s \nFilename: %s \nStart Frequency (MHz): %s \nStop Frequency (MHz): %s \nLNA gain (dB): %s\nCable losses (dB): %s \nAntenna Efficiency: %s \n' % (self.Path, self.Filename, self.Start_freq, self.Stop_freq, self.G_LNA, self.Lcable, self.antennaEfficiency)) 
+           canvas.draw()
                    #tempfreq = Spec[:,0]/1e6
                    #temp = Spec[:,1]
                    #temp_spec = np.append(temp_spec, temp)
@@ -307,7 +565,101 @@ class GUI_set_up:
     #           self.fig_plot.axis([int(self.Start_freq),int(self.Stop_freq), minSpec+self.x_factor, maxSpec-self.x_factor])
 
        print ('time:' , (time.time()-tstart))
+       
+class CandidateFinder(object):
+    def __init__(self):
+        self.filenames = []
+        self.counter = None
+
+    def _is_valid(self,pfd):
+        ps_valid = os.path.isfile("%s.ps" % pfd)
+        bp_valid = os.path.isfile("%s.bestprof" % pfd)
+        return all((ps_valid,bp_valid))
+
+    def get_from_directory(self,directory):
+        pfds = glob.glob("%s/*.pfd" % directory)
+        print ("%s/*.pfd" % directory)
+        if not pfds:
+            return None
+        for pfd in pfds:
+            if self._is_valid(pfd):
+                self.filenames.append(pfd)
+
+    def get_from_directories(self,directory):
+        counter = 0
+        print ("Searching %s" % directory)
+        rambler = os.walk(directory)
+        for path,dirnames,filenames in rambler:
+            for filename in filenames:
+                if filename.endswith(".pfd"):
+                    pfd = os.path.join(path,filename)
+                    if self._is_valid(pfd):
+                        self.filenames.append(pfd)
+                        counter+=1
+                        sys.stdout.write("Found %d files...\r"%counter)
+                        sys.stdout.flush()
+                
+    def parse_all(self):
+        filenames = list(set(self.filenames))
+        nfiles = len(filenames)
+        recarray = np.recarray(nfiles,dtype=BESTPROF_DTYPE)
+        print ("Parsing %d .bestprof files..." % nfiles)
+        for ii,filename in enumerate(filenames):
+            if ii%10 == 0:
+                sys.stdout.write("%.2f\r"%(100.*ii/nfiles))
+                sys.stdout.flush()
+            bestprof_file = "%s.bestprof" % filename
+            info = parse_bestprof(bestprof_file)
+            for key in PLOTABLE_FIELDS:
+                if key in info.keys():
+                    val = info[key]
+                else: 
+                    val = 0
+                recarray[ii][key] = val
+            recarray[ii]["PFD_file"] = filename
+        return recarray
+    
+    def parse_bestprof(filename):
+        f = open(filename,"r")
+        lines = f.readlines()
+        f.close()
+        info = {} 
+        for ii,line in enumerate(lines):
+            if not line.startswith("# "):
+                continue
+            if line.startswith("# Prob(Noise)"):
+                line = line[2:].split("<")
+            else:
+                line = line[2:].split("=")
+                
+            key = line[0].strip()
+            value = line[1].strip()
+            
+            if "+/-" in value:
+                value = value.split("+/-")[0]
+                if "inf" in value:
+                    value = "0.0"
+    
+            if value == "N/A":
+                value = "0.0"
+    
+            if "Epoch" in key:
+                key = key.split()[0]
+    
+            if key == "Prob(Noise)":
+                key = "Sigma"
+                try:
+                    value = value.split("(")[1].split()[0].strip("~")
+                except:
+                    value = "30.0"
+                        
+            info[key]=value
+        return info
+ 
+    
 if __name__ == '__main__':
-   window = Tk()
-   start = GUI_set_up(window, fields)
-   window.mainloop() 
+   root = Tk()
+   root.tk_setPalette(**DEFAULT_PALETTE)
+   start = GUI_set_up(root)
+
+   root.mainloop() 

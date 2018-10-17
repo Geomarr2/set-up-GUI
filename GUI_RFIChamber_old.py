@@ -66,6 +66,7 @@ class NavSelectToolbar(NavigationToolbar2TkAgg):
         button = Button(master=self, text=text, padx=2, pady=2, command=command, **kwargs)
         button.pack(side=LEFT,fill="y")
         return button
+    
 
 class GUI_set_up:
     def __init__(self,  window, fields):
