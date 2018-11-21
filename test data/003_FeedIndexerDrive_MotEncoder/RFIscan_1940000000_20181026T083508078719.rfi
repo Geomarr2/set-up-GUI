@@ -1,0 +1,31 @@
+MPIfR RFI file 
+
+DATA
+Center Frequency in Hz:
+1940000000.0
+Bandwidth in Hz:
+39999923.5753
+Number of Samples:
+373851
+Frequency Spacing:
+uniform
+Integration time in milliseconds:
+6000.0
+Unique Scan ID:
+TektronicRSA306BSerialB020368154053602239314
+Data Acquisition System:
+Tektronic:_RSA306B_Serial:_B020368
+Chamber Calibration:
+default
+Antenna Calibration:
+default
+Cable Calibration:
+default
+LNA Calibration:
+default
+Background Data:
+default
+Timestamp:
+2018-10-26T08:35:08.078719
+DUT comments:
+Feed-Indexer Motor Encoder
