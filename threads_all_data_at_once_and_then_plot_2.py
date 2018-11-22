@@ -167,7 +167,7 @@ class GUI_set_up():
 class ReduceData(threading.Thread):
     FreqMaxMinValues = {}
     #MinValues = {}
-    #lock = threading.Lock()
+    lock = threading.Lock()
     #q = queue.Queue()
     def __init__(self,original_data,Cfreq, plot_num, scaling_factor, bw):
         threading.Thread.__init__(self)
@@ -176,9 +176,9 @@ class ReduceData(threading.Thread):
         self.plot_num = plot_num
         self.scaling_factor = scaling_factor
         self.bw = bw
-        #ReduceData.lock.acquire()
+        ReduceData.lock.acquire()
         ReduceData.FreqMaxMinValues[Cfreq] = []
-        #ReduceData.lock.release()
+        ReduceData.lock.release()
 
     def read_reduce_Data(self):
         # read in the whole BW in one array
@@ -205,10 +205,10 @@ class ReduceData(threading.Thread):
         spec_min = self.V_M2dBuV_M(spec_min)
         freq = np.linspace(Start_freq,Stop_freq,len(spec_max)) 
         temp = freq,spec_max,spec_min
-        #ReduceData.lock.acquire()
+        ReduceData.lock.acquire()
         ReduceData.FreqMaxMinValues[self.Cfreq] = temp#np.array(temp, dtype=np.float32)
         #ReduceData.q.put(np.array(temp, dtype=np.float32))
-        #ReduceData.lock.release()
+        ReduceData.lock.release()
        # data = np.array(temp, dtype=np.float32)
        # print(time.time)
       #  return data       
@@ -391,18 +391,12 @@ class GUIOptions(threading.Thread):
         t0 = time.time()
         for cnt, Cfreq in enumerate(te):
             
-            Startfreq = 0
-            Stopfreq = 0
-            Startfreq = Cfreq - bw/2
-            Stopfreq = Cfreq + bw/2
             #data = self.head.readFromFile(headerFile[cnt])
             original_data = self.loadDataFromFileOLD(dataFile[cnt])
             thread = ReduceData(original_data,Cfreq, plot_num, scaling_factor, bw)
             thread.start()
-            threadData = threading.Thread(target=thread.read_reduce_Data())
-            threadData.start()
+            thread.read_reduce_Data()
             threads.append(thread.FreqMaxMinValues[Cfreq])
-            #threads += [thread]
             
         print(time.time()-t0)
         
@@ -411,16 +405,9 @@ class GUIOptions(threading.Thread):
         specMax = threads[:,1,:].flatten()
         specMin = threads[:,2,:].flatten()
         print(freq)
-#        x = [self.loadDataFromFile(dataFile[cnt], plot_num, scaling_factor, Cfreq, color) for cnt, Cfreq in enumerate(te)]
-       # CfreqMax = max(te)
-        #CfreqMin = min(te)
-        #Startfreq = CfreqMin - bw/2
-        #Stopfreq = CfreqMax + bw/2
         temp = freq, specMax, specMin  
         temp = np.array(temp)
-        print(np.shape(temp))
         self.calibrateDataNEW(temp,te, Stop_freq, Start_freq, color, scaling_factor, plot_num)
-#        print(self.factors(self.head[plot_num].nSample))
         fig_plot.set_ylim(-50, 100)
         fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
         self.canvas.draw()   

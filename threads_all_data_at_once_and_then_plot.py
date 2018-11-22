@@ -166,9 +166,9 @@ class GUI_set_up():
         
 class ReduceData(threading.Thread):
     FreqMaxMinValues = {}
-    MinValues = {}
+    #MinValues = {}
     lock = threading.Lock()
-    q = queue.Queue()
+    #q = queue.Queue()
     def __init__(self,original_data,Cfreq, plot_num, scaling_factor, bw):
         threading.Thread.__init__(self)
         self.original_data = original_data
@@ -391,17 +391,13 @@ class GUIOptions(threading.Thread):
         t0 = time.time()
         for cnt, Cfreq in enumerate(te):
             
-            Startfreq = 0
-            Stopfreq = 0
-            Startfreq = Cfreq - bw/2
-            Stopfreq = Cfreq + bw/2
             #data = self.head.readFromFile(headerFile[cnt])
             original_data = self.loadDataFromFileOLD(dataFile[cnt])
             thread = ReduceData(original_data,Cfreq, plot_num, scaling_factor, bw)
+            thread.start()
             thread.read_reduce_Data()
             threads.append(thread.FreqMaxMinValues[Cfreq])
-            #threads += [thread]
-            thread.start()
+            
         print(time.time()-t0)
         
         threads = np.array(threads, dtype='float32')
@@ -409,16 +405,9 @@ class GUIOptions(threading.Thread):
         specMax = threads[:,1,:].flatten()
         specMin = threads[:,2,:].flatten()
         print(freq)
-#        x = [self.loadDataFromFile(dataFile[cnt], plot_num, scaling_factor, Cfreq, color) for cnt, Cfreq in enumerate(te)]
-       # CfreqMax = max(te)
-        #CfreqMin = min(te)
-        #Startfreq = CfreqMin - bw/2
-        #Stopfreq = CfreqMax + bw/2
         temp = freq, specMax, specMin  
         temp = np.array(temp)
-        print(np.shape(temp))
         self.calibrateDataNEW(temp,te, Stop_freq, Start_freq, color, scaling_factor, plot_num)
-#        print(self.factors(self.head[plot_num].nSample))
         fig_plot.set_ylim(-50, 100)
         fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
         self.canvas.draw()   
@@ -883,47 +872,6 @@ class GUIOptions(threading.Thread):
   #     return Spec
    
 
-    '''   
-    def read_reduce_Data(self,spectrum,cfreq, plot_num, scaling_factor):
-        # read in the whole BW in one array
-# set the display sample size depending on the display bandwidth and resolution  
-     #   t0 = time.time()
-        spec = self.dBuV_M2V_M(spectrum)
-        #freq = spectrum[0]
-        x = int(len(spectrum)/scaling_factor)
-        spec_min = np.array([], dtype=np.float32)
-        spec_max = np.array([], dtype=np.float32)
-        freq = np.array([], dtype=np.float32)
-        #freq_max = np.array([], dtype=np.float32)
-        bw = self.head[plot_num].bandwidth
-        Start_freq = cfreq -bw/2
-        Stop_freq = cfreq +bw/2
-        scale = range(scaling_factor)
-#        spec_max = np.max(spec[(i*x):(x*i+x)])
-        spec_max = [np.max(spec[(i*x):(x*i+x)]) for i in range (scaling_factor)]
-        #ind_max  = [(np.argmax(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
-        spec_min = [np.min(spec[(i*x):(x*i+x)]) for i in range (scaling_factor)]
-        #ind_min  = [(np.argmin(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
-        #freq_max = [freq[value] for count, value in enumerate(ind_max)]
-        #freq_min = [freq[value] for count, value in enumerate(ind_min)]
-            #self.leg_data = [spec_max, spec_min] 
-        spec_max = self.V_M2dBuV_M(spec_max)
-        spec_min = self.V_M2dBuV_M(spec_min)
-        freq = np.linspace(Start_freq,Stop_freq,len(spec_max)) 
-       
-        temp = freq,spec_max,spec_min
-        data = np.array(temp, dtype=np.float32)
-       # print(time.time)
-        return data       
-    
-    def dBuV_M2V_M(self,spec):
-        VperM = pow(10,(spec-120)/20)
-        return VperM    
-    
-    def V_M2dBuV_M(self,spec):
-        dBuV_M = 20*np.log10(spec)+120
-        return dBuV_M  
-    '''
     def getZoomInput(self):
        # print(self.newRWB_entry_data["Start Frequency (MHz): "].get())
         if self.newRWB_entry_data["Start Frequency (MHz): "].get() == '':
@@ -937,18 +885,7 @@ class GUIOptions(threading.Thread):
             self.zoom_Stop_freq = float(self.newRWB_entry_data["Stop Frequency (MHz): "].get())*1e6
             self.zoom_max = float(self.newRWB_entry_data["Maximum amplitude: "].get())
             self.zoom_min = float(self.newRWB_entry_data["Minimum amplitude: "].get())
-        '''
-        if self.newRWB_entry_data["Start Frequency (MHz): "].get() == '':
-            tkMessageBox.showwarning(title="Warning", message="Please enter the Start Frequency in MHz")
-        elif self.newRWB_entry_data["Stop Frequency (MHz): "].get() == '':
-            tkMessageBox.showwarning(title="Warning", message="Please enter the Stop Frequency in MHz")
-        elif self.newRWB_entry_data["Maximum amplitude: "].get() == '':
-            tkMessageBox.showwarning(title="Warning", message="Please enter the Maximum amplitude")
-        elif self.newRWB_entry_data["Minimum amplitude: "].get() == '':
-            tkMessageBox.showwarning(title="Warning", message="Please enter the Minimum amplitude")
-        '''
 
-        
     def plot_data(self,reduced_data,yaxis_label,color, Start_freq, Stop_freq):
         
         if self.original == True:
@@ -957,10 +894,7 @@ class GUIOptions(threading.Thread):
         else:
             self.max_plot, = fig_plot.plot(reduced_data[0]/1e6,reduced_data[1], color=color[0])
             self.min_plot, = fig_plot.plot(reduced_data[0]/1e6,reduced_data[2], color=color[1])
-          #  self.canvas.update()
-          #  self.canvas.flush_events()
-            #self.leg = ['Max', 'Min']
-            #self.leg_data = [self.max_plot, self.min_plot]
+
             
 class CandidateFinder(object):
     def __init__(self):
