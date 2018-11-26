@@ -38,7 +38,7 @@ import traceback
 from matplotlib.widgets import Lasso
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
-import queue
+
 from numba import vectorize
 import threading 
 from functools import reduce
@@ -98,18 +98,9 @@ DEFAULT_STYLE_1 = {"foreground":"black","background":"lightblue"}
 DEFAULT_STYLE_2 = {"foreground":"gray90","background":"darkgreen"}
 DEFAULT_STYLE_3 = {"foreground":"gray90","background":"darkred"}
 DEFAULT_STYLE_NEW = {"foreground":"gray90","background":"darkgreen"}
-figure = Figure(figsize=(10,10))
-fig_plot = figure.add_subplot(111)
 
 
-continuePlotting = False
- 
-def change_state():
-    global continuePlotting
-    if continuePlotting == True:
-        continuePlotting = False
-    else:
-        continuePlotting = True
+
 
 class NavSelectToolbar(NavigationToolbar2TkAgg): 
     def __init__(self, canvas,root,parent):
@@ -168,7 +159,7 @@ class ReduceData(threading.Thread):
     FreqMaxMinValues = {}
     #MinValues = {}
     lock = threading.Lock()
-    #q = queue.Queue()
+    
     def __init__(self,original_data,Cfreq, plot_num, scaling_factor, bw):
         threading.Thread.__init__(self)
         self.original_data = original_data
@@ -221,13 +212,12 @@ class ReduceData(threading.Thread):
         dBuV_M = 20*np.log10(spec)+120
         return dBuV_M  
      
-class GUIOptions(threading.Thread):
+class GUIOptions():
     
     def __init__(self,root,parent):
         self.root = root
         self.parent = parent
         self.IntializePlot()
-        #threading.Thread(target=lambda self=self:self.dump_filenames(plotNumber[1], color_set2)).start() 
         
 
         self.directory = []
@@ -273,12 +263,7 @@ class GUIOptions(threading.Thread):
         self.newRBW_opts_frame = Frame(self.parent.newRBW_button_frame)
         
         self.newRBW_opts_frame.pack(side=RIGHT,fill=BOTH,expand=1)
-        '''
-        self.show_newRBW_button=self._custom_button(
-                self.newRBW_opts_frame,text = 'Replot Second Data', 
-                command=(lambda self=self:self.zoomActivate2Data()),
-                **DEFAULT_STYLE_2)
-        '''
+
         self.show_newRBW_button=self._custom_button(
                 self.newRBW_opts_frame,text = 'Replot '+plotNumber[0].lstrip('Load'), 
                 command=(lambda self=self:self.zoomActivate(plotNumber[0], color_set1)), 
@@ -408,10 +393,97 @@ class GUIOptions(threading.Thread):
         temp = freq, specMax, specMin  
         temp = np.array(temp)
         self.calibrateDataNEW(temp,te, Stop_freq, Start_freq, color, scaling_factor, plot_num)
-        fig_plot.set_ylim(-50, 100)
-        fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
+        self.fig_plot.set_ylim(-50, 100)
+        self.fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
+        self.canvas.draw()   
+    def zoom_dump_data(self, scaling_factor,color, dataFile, CFFreq, plot_num):
+        # original data start frequency and stop frequency and datafile
+        bw = self.head[plot_num].bandwidth
+        zoom_Start_freq_plot = self.zoom_Start_freq - bw
+        zoom_Stop_freq_plot = self.zoom_Stop_freq + bw
+        
+        dataFile = [dataFile[i] for i in range(len(dataFile)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6]
+        te = [CFFreq[i] for i in range(len(CFFreq)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6] 
+        threads = []
+        new_Cfreq = np.array([], dtype = 'float32')
+        t0 = time.time()
+        for cnt, Cfreq in enumerate(te):
+            if Cfreq >= zoom_Start_freq_plot and Cfreq <= zoom_Stop_freq_plot:
+            #data = self.head.readFromFile(headerFile[cnt])
+                new_Cfreq = np.append(new_Cfreq, Cfreq) 
+                original_data = self.loadDataFromFileOLD(dataFile[cnt])
+                thread = ReduceData(original_data,Cfreq, plot_num, scaling_factor, bw)
+                thread.start()
+                thread.read_reduce_Data()
+                threads.append(thread.FreqMaxMinValues[Cfreq])
+            
+        print(time.time()-t0)
+        threads = np.array(threads, dtype='float32')
+        freq = threads[:,0,:].flatten() 
+        specMax = threads[:,1,:].flatten()
+        specMin = threads[:,2,:].flatten()
+        print(freq)
+        temp = freq, specMax, specMin  
+        temp = np.array(temp)
+        self.calibrateDataNEW(temp,new_Cfreq, zoom_Stop_freq_plot, zoom_Start_freq_plot, color, scaling_factor, plot_num)
+
+        self.fig_plot.set_ylim(self.zoom_min,self.zoom_max)
+        self.fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
         self.canvas.draw()   
         
+    def zoom_dump_data_org(self, color,headerFile, dataFile, CFFreq, scaling_factor, plot_num):
+        # original data start frequency and stop frequency and datafile
+
+        scaling_factor = int(self.head[plot_num].nSample)
+        original_data = []# np.array([], dtype='float32')
+        d = []
+        counter = []
+        # I want to over sample
+        bw = self.head[plot_num].bandwidth
+        zoom_Start_freq_plot = self.zoom_Start_freq - bw
+        zoom_Stop_freq_plot = self.zoom_Stop_freq + bw
+        Start_freq = min(CFFreq) - (20*1e6)
+        Stop_freq = max(CFFreq) + (20*1e6)
+        dataFile = [dataFile[i] for i in range(len(dataFile)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6]
+        te = [CFFreq[i] for i in range(len(CFFreq)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6]             
+        if self.zoom_Start_freq <= Start_freq:
+            zoom_Start_freq_plot = self.zoom_Start_freq 
+        elif self.zoom_Stop_freq >= Stop_freq:
+            zoom_Stop_freq_plot = self.zoom_Stop_freq 
+            
+        for cnt, value in enumerate(te):
+                 if value >= zoom_Start_freq_plot and value <= zoom_Stop_freq_plot:
+                     d.append(dataFile[cnt])
+                     counter.append(cnt)
+                     
+        headerInfo = [open(headerFile[val],'r').readlines() for count, val in enumerate(counter)]
+        temp = [value[Cnt+1] for counter, value in enumerate(headerInfo) for Cnt, Val in enumerate(value) if Val == 'Center Frequency in Hz:\n']
+        temp = [float(value[:-1]) for counter, value in enumerate(temp) if value.endswith('\n')]
+        temp = np.array(temp).astype('float32')
+        if len(temp) <= 2:
+            
+            original_data = self.loadDataFromFile_org(d[0], temp[0],plot_num)
+            self.calibrateData(original_data, temp[0]+bw/2, temp[0]-bw/2, color, scaling_factor, plot_num)
+    
+            original_data = self.loadDataFromFile_org(d[1], temp[1],plot_num)
+            self.calibrateData(original_data, temp[1]+bw/2, temp[1]-bw/2, color, scaling_factor, plot_num)
+        else:   
+            
+            original_data = self.loadDataFromFile_org(d[0], temp[0],plot_num)
+            self.calibrateData(original_data, temp[0]+bw/2, temp[0]-bw/2, color, scaling_factor, plot_num)
+    
+            original_data = self.loadDataFromFile_org(d[1], temp[1],plot_num)
+            self.calibrateData(original_data, temp[1]+bw/2, temp[1]-bw/2, color, scaling_factor, plot_num)
+            
+            original_data = self.loadDataFromFile_org(d[2], temp[2],plot_num)
+            self.calibrateData(original_data, temp[2]+bw/2, temp[2]-bw/2, color, scaling_factor, plot_num)
+        
+        self.fig_plot.set_ylim(self.zoom_min,self.zoom_max)
+        self.fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
+        
+        self.original = False
+       # self.fig_plot.legend(['Original data'])
+        self.canvas.draw()          
     def printHeaderInfo(self,dataFile,headerFile, plot_num):
 #Load in all the header file get the info and the BW from max and min center freq
         
@@ -600,81 +672,7 @@ class GUIOptions(threading.Thread):
             i+=1
         return cfreq,headerFile
    
-    def zoom_dump_data(self, scaling_factor,color, dataFile, CFFreq, plot_num):
-        # original data start frequency and stop frequency and datafile
-        bw = self.head[plot_num].bandwidth
-        zoom_Start_freq_plot = self.zoom_Start_freq - bw
-        zoom_Stop_freq_plot = self.zoom_Stop_freq + bw
-        
-        dataFile = [dataFile[i] for i in range(len(dataFile)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6]
-        te = [CFFreq[i] for i in range(len(CFFreq)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6] 
-              
-        for cnt, value in enumerate(te):
-             if value >= zoom_Start_freq_plot and value <= zoom_Stop_freq_plot:
-                 Startfreq = value -bw/2
-                 Stopfreq = value + bw/2
-                 originaldata = self.loadDataFromFile(dataFile[cnt])
-                 
-                 self.calibrateData(self.read_reduce_Data(originaldata,value,plot_num, scaling_factor), Stopfreq, Startfreq, color, scaling_factor, plot_num)
-
-        fig_plot.set_ylim(self.zoom_min,self.zoom_max)
-        fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
-        #self.fig_plot.legend(self.leg_data,self.leg)
-        self.canvas.draw()   
-        
-    def zoom_dump_data_org(self, color,headerFile, dataFile, CFFreq, scaling_factor, plot_num):
-        # original data start frequency and stop frequency and datafile
-
-        scaling_factor = int(self.head[plot_num].nSample)
-        original_data = []# np.array([], dtype='float32')
-        d = []
-        counter = []
-        # I want to over sample
-        bw = self.head[plot_num].bandwidth
-        zoom_Start_freq_plot = self.zoom_Start_freq - bw
-        zoom_Stop_freq_plot = self.zoom_Stop_freq + bw
-        Start_freq = min(CFFreq) - (20*1e6)
-        Stop_freq = max(CFFreq) + (20*1e6)
-        dataFile = [dataFile[i] for i in range(len(dataFile)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6]
-        te = [CFFreq[i] for i in range(len(CFFreq)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6]             
-        if self.zoom_Start_freq <= Start_freq:
-            zoom_Start_freq_plot = self.zoom_Start_freq 
-        elif self.zoom_Stop_freq >= Stop_freq:
-            zoom_Stop_freq_plot = self.zoom_Stop_freq 
-            
-        for cnt, value in enumerate(te):
-                 if value >= zoom_Start_freq_plot and value <= zoom_Stop_freq_plot:
-                     d.append(dataFile[cnt])
-                     counter.append(cnt)
-                     
-        headerInfo = [open(headerFile[val],'r').readlines() for count, val in enumerate(counter)]
-        temp = [value[Cnt+1] for counter, value in enumerate(headerInfo) for Cnt, Val in enumerate(value) if Val == 'Center Frequency in Hz:\n']
-        temp = [float(value[:-1]) for counter, value in enumerate(temp) if value.endswith('\n')]
-        temp = np.array(temp).astype('float32')
-        if len(temp) <= 2:
-            
-            original_data = self.loadDataFromFile_org(d[0], temp[0],plot_num)
-            self.calibrateData(original_data, temp[0]+bw/2, temp[0]-bw/2, color, scaling_factor, plot_num)
-    
-            original_data = self.loadDataFromFile_org(d[1], temp[1],plot_num)
-            self.calibrateData(original_data, temp[1]+bw/2, temp[1]-bw/2, color, scaling_factor, plot_num)
-        else:   
-            
-            original_data = self.loadDataFromFile_org(d[0], temp[0],plot_num)
-            self.calibrateData(original_data, temp[0]+bw/2, temp[0]-bw/2, color, scaling_factor, plot_num)
-    
-            original_data = self.loadDataFromFile_org(d[1], temp[1],plot_num)
-            self.calibrateData(original_data, temp[1]+bw/2, temp[1]-bw/2, color, scaling_factor, plot_num)
-            
-            original_data = self.loadDataFromFile_org(d[2], temp[2],plot_num)
-            self.calibrateData(original_data, temp[2]+bw/2, temp[2]-bw/2, color, scaling_factor, plot_num)
-        
-        fig_plot.set_ylim(self.zoom_min,self.zoom_max)
-        fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
-        
-        self.original = False
-       # self.fig_plot.legend(['Original data'])
-        self.canvas.draw()   
+ 
 
 
     def zoomActivate(self, plot_num, color):
@@ -723,14 +721,15 @@ class GUIOptions(threading.Thread):
         t1 = time.time()
         print(t1 - t0)
     def IntializePlot(self):
-
-        self.canvas = FigureCanvasTkAgg(figure, master=self.parent.top_frame_plot)
+        self.figure = Figure(figsize=(17,10))
+        self.fig_plot = self.figure.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.parent.top_frame_plot)
         self.canvas.get_tk_widget().configure(background="#d469a3", highlightcolor='grey', highlightbackground='white')
         self.canvas.get_tk_widget().pack(side=BOTTOM, fill=X, padx=5, pady=5)
         self.toolbar = NavSelectToolbar(self.canvas,self.parent.top_frame_plot,self)
         self.toolbar.update()
-        fig_plot.set_ylabel("Electrical Field Strength [dBuV/m]")#('Power [dBm]')
-        fig_plot.set_xlabel("Frequency (MHz)" )#(resolution %.3f kHz)"%1)
+        self.fig_plot.set_ylabel("Electrical Field Strength [dBuV/m]")#('Power [dBm]')
+        self.fig_plot.set_xlabel("Frequency (MHz)" )#(resolution %.3f kHz)"%1)
         self.cutsom_legend()
         
     def cutsom_legend(self):
@@ -742,16 +741,21 @@ class GUIOptions(threading.Thread):
         org2 = mpatches.Patch(color=color_set2[2], label='Original data 2') 
 
         # Put a legend to the right of the current axis
-        fig_plot.legend(handles=[set1_max, set1_min, set2_max, set2_min, org1, org2], loc='upper center', bbox_to_anchor=(0.5, 1.1),
+        self.fig_plot.legend(handles=[set1_max, set1_min, set2_max, set2_min, org1, org2], loc='upper center', bbox_to_anchor=(0.5, 1.1),
           fancybox=True, shadow=True, ncol=6)
+    
     
     def clear_plot(self):
         #self.clear_data()
+        #self.clear_plot()
+        #self.canvas.clear()
         self.canvas.get_tk_widget().destroy()
         self.toolbar.destroy()
         self.canvas = None
         self.IntializePlot()
+        #figure = Figure(figsize=(20,20))
 
+        
     def clear_plot_data(self):
         answer = tkMessageBox.askyesno(title="Clear Plot and Data", message="Are you sure you want to clear the loaded data?")
         if (answer):
@@ -766,6 +770,7 @@ class GUIOptions(threading.Thread):
         self.zoom_trigger1 = None
         self.zoom_trigger2 = None
         #self.clear_plot()
+
             
     def new_res_BW(self):
         entries = {}
@@ -892,8 +897,8 @@ class GUIOptions(threading.Thread):
             self.org_data = self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[1], color=color)
             self.leg = ['Original']
         else:
-            self.max_plot, = fig_plot.plot(reduced_data[0]/1e6,reduced_data[1], color=color[0])
-            self.min_plot, = fig_plot.plot(reduced_data[0]/1e6,reduced_data[2], color=color[1])
+            self.max_plot, =self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[1], color=color[0])
+            self.min_plot, = self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[2], color=color[1])
 
             
 class CandidateFinder(object):
