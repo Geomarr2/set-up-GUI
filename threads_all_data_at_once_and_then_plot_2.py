@@ -23,6 +23,7 @@ import pandas as pd
 import sys
 import time
 from tkinter import *
+from tkinter import scrolledtext
 from scipy.interpolate import spline
 from tkinter import messagebox as tkMessageBox
 from tkinter import filedialog as tkFileDialog
@@ -38,6 +39,7 @@ import traceback
 from matplotlib.widgets import Lasso
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
+ 
 
 from numba import vectorize
 import threading 
@@ -211,10 +213,24 @@ class ReduceData(threading.Thread):
     def V_M2dBuV_M(self,spec):
         dBuV_M = 20*np.log10(spec)+120
         return dBuV_M  
-     
+    
+class plotInfo():
+    def __init__(self):
+        self.newWindow = Tk()
+        self.newWindow.mainloop()
+        def createWindow(self, txt):
+            scroll_txt = scrolledtext.ScrolledText(self.newWindow,width=40,height=10).pack()
+            print(txt)
+            scroll_txt.insert(INSERT, txt)
+        def deleteWindow(self):
+            self.newWindow.destroy()
+        
 class GUIOptions():
     
     def __init__(self,root,parent):
+        
+        
+        
         self.root = root
         self.parent = parent
         self.IntializePlot()
@@ -228,10 +244,16 @@ class GUIOptions():
         self.UserInputMissingData = 0
         self.max_plot = []
         self.min_plot = []
+
+        
+        #tab1 = Frame(tab_control)
+        #tab1.pack()
+        #tab2 = Frame(tab_control)
+        #tab2.pack()
         
         #create headerfile
-        self.head[plotNumber[0]] = mpifrRFIHeader.HeaderInformation()
-        self.head[plotNumber[1]] = mpifrRFIHeader.HeaderInformation()
+        self.head[plotNumber[0]] = {}
+        #self.head[plotNumber[1]] = mpifrRFIHeader.HeaderInformation()
         # load CCF now not need to load every time you get the CCF of every 40MHz chunck
         
         #self.dataFile = []
@@ -319,6 +341,104 @@ class GUIOptions():
 #    def gui_handler(self):
 #        change_state()
 #        threading.Thread(target=lambda self=self:self.dump_filenames(plotNumber[1], color_set2)).start()   
+    def GetCF(self,dataFile,headerFile, plot_num):
+#Load in all the header file get the info and the BW from max and min center freq
+        
+        file = [value for counter, value in enumerate(headerFile)]
+        headerInfo = [open(headerFile[count],'r').readlines() for count, val in enumerate(headerFile)]
+        temp = [value[Cnt+1] for counter, value in enumerate(headerInfo) for Cnt, Val in enumerate(value) if Val == 'Center Frequency in Hz:\n']
+        temp = [float(value[:-1]) for counter, value in enumerate(temp) if value.endswith('\n')]
+        temp = np.array(temp).astype('float32')
+        
+        return temp
+
+    def printHeaderInfo(self,dataFile,headerFile, plot_num, Cfreq):
+#Load in all the header file get the info and the BW from max and min center freq
+       # d = 
+        self.head[plot_num] = dict(zip(mpifrRFIHeader.HeaderInformation(Cfreq), [0 for i in range(len(Cfreq))]))
+        print(self.head)
+        if len(Cfreq) == len(dataFile):
+            #temp = [np.load(value) for counter, value in enumerate(self.dataFile) for counterHeader, valueHeader in enumerate(temp) if value == (valueHeader+'.npy')]
+            for cnt in range(len(Cfreq)):
+                file2 = open(headerFile[cnt], "r")
+                headerInfo = file2.readlines()
+                msg = []
+                if headerInfo[6] != 'default\n' and headerInfo[8] != 'default\n' and headerInfo[18] != 'default\n' and headerInfo[20] != 'default\n'and headerInfo[22] != 'default\n'and headerInfo[24] != 'default\n':
+                    self.head[plot_num][str(Cfreq[cnt])].centerFrequency = float(headerInfo[4])
+                    self.head[plot_num][Cfreq[cnt]].bandwidth = float(headerInfo[6])
+                    self.head[plot_num][Cfreq[cnt]].chambercalib = headerInfo[18]
+                    self.head[plot_num][Cfreq[cnt]].antennacalib = float(headerInfo[20])
+                    self.head[plot_num][Cfreq[cnt]].cablecalib = float(headerInfo[22])
+                    self.head[plot_num][Cfreq[cnt]].lnaCalib = headerInfo[24]
+                    self.head[plot_num][Cfreq[cnt]].nSample = int(headerInfo[8])-1
+                else:
+                    headTemp[plot_num][str(Cfreq[cnt])].bandwidth = 40*1e6
+                    self.head[plot_num][cnt].chambercalib = PATHCCF 
+                    self.head[plot_num][cnt].antennacalib = 0.75
+                    self.head[plot_num][cnt].cablecalib = 1
+                    self.head[plot_num][cnt].lnaCalib = PATHGAINCIRCUIT
+                    self.head[plot_num][cnt].nSample = 373851-1
+                self.CCFdata = self.CCF_DatafileCSV(self.head[plot_num][cnt].chambercalib)    
+                for x in headerInfo:
+                    msg.append(x)
+                file2.close()
+                tkMessageBox.showinfo(title = "Acquisition information", message = msg)
+        else:
+            tkMessageBox.showwarning('Warning','Data is missing')
+        return msg
+    
+    
+    def checkShameHeader_Data(self,HeaderFile,dataFile):
+#Load in all the header file get the info and the BW from max and min center freq
+        if len(HeaderFile) != len(dataFile): 
+            tkMessageBox.showwarning('Warning','Data is missing')
+       # return boolTemp
+    
+    def printHeaderInfoNEW(self,dataFile,headerFile, plot_num, Cfreq):
+#Load in all the header file get the info and the BW from max and min center freq
+       # d = 
+        headTemp  = {}
+        headTemp = mpifrRFIHeader.HeaderInformation()
+        #print(self.head)
+        #if len(headerFile) == len(dataFile):
+            #temp = [np.load(value) for counter, value in enumerate(self.dataFile) for counterHeader, valueHeader in enumerate(temp) if value == (valueHeader+'.npy')]
+            
+        file2 = open(headerFile, "r")
+        headerInfo = file2.readlines()
+            
+        if headerInfo[6] != 'default\n' and headerInfo[8] != 'default\n' and headerInfo[18] != 'default\n' and headerInfo[20] != 'default\n'and headerInfo[22] != 'default\n'and headerInfo[24] != 'default\n':
+            headTemp.centerFrequency = float(headerInfo[4])
+            headTemp.bandwidth = float(headerInfo[6])
+            headTemp.chambercalib = headerInfo[18]
+            headTemp.antennacalib = float(headerInfo[20])
+            headTemp.cablecalib = float(headerInfo[22])
+            headTemp.lnaCalib = headerInfo[24]
+            headTemp.nSample = int(headerInfo[8])-1
+            
+        else:
+            headTemp.bandwidth = 40*1e6
+            headTemp.chambercalib = PATHCCF 
+            headTemp.antennacalib = 0.75
+            headTemp.cablecalib = 1
+            headTemp.lnaCalib = PATHGAINCIRCUIT
+            headTemp.nSample = 373851-1
+        self.CCFdata = self.CCF_DatafileCSV(headTemp.chambercalib)    
+        headTemp.dataFile = dataFile
+        headTemp.headerFile = headerFile
+        file2.close()
+      #  else:
+       #     tkMessageBox.showwarning('Warning','Data is missing')
+        return headTemp
+    
+    def getDataID(self,headerFile):
+#Load in all the header file get the info and the BW from max and min center freq
+        
+        headerInfo = [open(headerFile[count],'r').readlines() for count, val in enumerate(headerFile)]
+   
+        tempID = [value[Cnt+1] for counter, value in enumerate(headerInfo) for Cnt, Val in enumerate(value) if Val == 'Unique Scan ID:\n']
+        tempID = [value[:-1] for counter, value in enumerate(tempID) if value.endswith('\n')]
+        
+        return tempID
         
     def dump_filenames(self, plot_num, color):
 #Load in vereything and seperate header and data file
@@ -331,31 +451,45 @@ class GUIOptions():
         dataFile = []
         headerFile = []    
         dataFileTEST = []
+        head = mpifrRFIHeader.HeaderInformation()
+        txtWindow = plotInfo()
    #     print(self.zoom_trigger)
         for i in range(len(self.Filename)): 
             if self.Filename[i].endswith(".rfi"):
                 headerFile.append(self.Filename[i])
             elif self.Filename[i].endswith(".npy"):
                 dataFileTEST.append(self.Filename[i])
+                
         
-        msg, tem = self.printHeaderInfo(dataFileTEST, headerFile, plot_num)
+        tem = self.GetCF(dataFileTEST, headerFile, plot_num)
         
         tem, headerFile = self.sortList(tem, headerFile)
         
-        tempID2 = self.head[plot_num].getDataID(headerFile)
+        tempID2 = head.getDataID(headerFile)
         
         dataFile = [self.directory+'/'+str(ID)+'.npy' for cnt, ID in enumerate(tempID2)]
+        self.checkShameHeader_Data(dataFile,headerFile)
+        Cfreq = tem
+        msg = []
+        for cnt in range(len(tem)):
+            self.head[plot_num][tem[cnt]] = self.printHeaderInfoNEW(dataFile[cnt],headerFile[cnt], plot_num, tem[cnt])   
         
-        self.head[plot_num].centerFrequency = tem
-        self.head[plot_num].bandwidth = float(msg[6])
-        bw = self.head[plot_num].bandwidth
+        file2 = open(headerFile[0], "r")
+        headerInfo = file2.readlines()
+        msg = [x for x in headerInfo]
+            #msg.append(x)
+        txtWindow.newWindow(msg)
+        tkMessageBox.showinfo(title = "Acquisition information", message = msg)   
+            
+        bw = self.head[plot_num][Cfreq[0]].bandwidth
+        nSample = self.head[plot_num][Cfreq[0]].nSample
         Start_freq = min(tem) - bw/2
         Stop_freq = max(tem) + bw/2
         self.xlim_Start_freq = Start_freq/1e6
         self.xlim_Stop_freq = Stop_freq/1e6
         
-        self.head[plot_num].dataFile =  dataFile
-        self.head[plot_num].headerFile =  headerFile
+        #self.head[plot_num].dataFile =  dataFile
+        #self.head[plot_num].headerFile =  headerFile
         
         plotDataStore[plot_num] = dataFile, headerFile,tem, self.head[plot_num]
         #self.dataFile = dataFile
@@ -368,7 +502,7 @@ class GUIOptions():
         Stop_freq = max(te) + bw/2
         #self.Start_freq = Start_freq
         #self.Stop_freq = Stop_freq 
-        nSample = self.head[plot_num].nSample
+        
         fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
         factors = sorted(i for i in fact if i >= 40)
         scaling_factor = factors[0]
@@ -395,7 +529,8 @@ class GUIOptions():
         self.calibrateDataNEW(temp,te, Stop_freq, Start_freq, color, scaling_factor, plot_num)
         self.fig_plot.set_ylim(-50, 100)
         self.fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
-        self.canvas.draw()   
+        self.canvas.draw()  
+        
     def zoom_dump_data(self, scaling_factor,color, dataFile, CFFreq, plot_num):
         # original data start frequency and stop frequency and datafile
         bw = self.head[plot_num].bandwidth
@@ -484,53 +619,6 @@ class GUIOptions():
         self.original = False
        # self.fig_plot.legend(['Original data'])
         self.canvas.draw()          
-    def printHeaderInfo(self,dataFile,headerFile, plot_num):
-#Load in all the header file get the info and the BW from max and min center freq
-        
-        file = [value for counter, value in enumerate(headerFile)]
-        headerInfo = [open(headerFile[count],'r').readlines() for count, val in enumerate(headerFile)]
-        temp = [value[Cnt+1] for counter, value in enumerate(headerInfo) for Cnt, Val in enumerate(value) if Val == 'Center Frequency in Hz:\n']
-        temp = [float(value[:-1]) for counter, value in enumerate(temp) if value.endswith('\n')]
-        temp = np.array(temp)#.astype('float32')
-        
-#check if all the numpy arrays is there
-        if len(temp) == len(dataFile):
-            #temp = [np.load(value) for counter, value in enumerate(self.dataFile) for counterHeader, valueHeader in enumerate(temp) if value == (valueHeader+'.npy')]
-            file2 = open(headerFile[0], "r")
-            msg = []
-            headerInfo = file2.readlines()
-            if headerInfo[6] != 'default\n' and headerInfo[8] != 'default\n' and headerInfo[18] != 'default\n' and headerInfo[20] != 'default\n'and headerInfo[22] != 'default\n'and headerInfo[24] != 'default\n':
-                self.head[plot_num].bandwidth = float(headerInfo[6])
-                self.head[plot_num].chambercalib = headerInfo[18]
-                self.head[plot_num].antennacalib = float(headerInfo[20])
-                self.head[plot_num].cablecalib = float(headerInfo[22])
-                self.head[plot_num].lnaCalib = headerInfo[24]
-                self.head[plot_num].nSample = int(headerInfo[8])-1
-            else:
-                self.head[plot_num].bandwidth = 40*1e6
-                self.head[plot_num].chambercalib = PATHCCF 
-                self.head[plot_num].antennacalib = 0.75
-                self.head[plot_num].cablecalib = 1
-                self.head[plot_num].lnaCalib = PATHGAINCIRCUIT
-                self.head[plot_num].nSample = 373851-1
-            self.CCFdata = self.CCF_DatafileCSV(self.head[plot_num].chambercalib)    
-            for x in headerInfo:
-                msg.append(x)
-            file2.close()
-            tkMessageBox.showinfo(title = "Acquisition information", message = msg)
-        else:
-            tkMessageBox.showwarning('Warning','Data is missing')
-        return msg, temp
-
-    def getDataID(self,headerFile):
-#Load in all the header file get the info and the BW from max and min center freq
-        
-        headerInfo = [open(headerFile[count],'r').readlines() for count, val in enumerate(headerFile)]
-   
-        tempID = [value[Cnt+1] for counter, value in enumerate(headerInfo) for Cnt, Val in enumerate(value) if Val == 'Unique Scan ID:\n']
-        tempID = [value[:-1] for counter, value in enumerate(tempID) if value.endswith('\n')]
-        
-        return tempID
 
     def printHeaderInfoZOOM(self,dataFile,headerFile,cfreq):
 #Load in all the header file get the info and the BW from max and min center freq
@@ -811,9 +899,11 @@ class GUIOptions():
         if tkMessageBox.askokcancel("Combustible Lemon",msg):
             self.parent.root.destroy()    
     
-    def cal_GainCircuit(self, upperfreq, lowerfreq,plot_num, scaling_factor = 40): 
+    def cal_GainCircuit(self, upperfreq, lowerfreq,plot_num, Cfreq,scaling_factor = 40): 
         # call circuitry gain here because you dont know what wiould be used for the second measurement
-       self.GainCircuitData = self.GainLNA_DatafileCSV(self.head[plot_num].lnaCalib)
+       print(upperfreq)
+       print(lowerfreq)
+       self.GainCircuitData = self.GainLNA_DatafileCSV(self.head[plot_num][Cfreq].lnaCalib)
        freqGain = (self.GainCircuitData[0,:])
        newfreqGain = np.linspace(lowerfreq,upperfreq,scaling_factor)
        testGain = np.interp(newfreqGain, freqGain, self.GainCircuitData[1,:])
@@ -845,7 +935,7 @@ class GUIOptions():
     def calibrateData(self, reduced_data, Stop_freq, Start_freq, color_data_set, scaling_factor, plot_num):
        
        CCF = self.get_CCF(scaling_factor, Stop_freq, Start_freq,  plot_num)
-       G_LNA = self.cal_GainCircuit(Stop_freq, Start_freq,plot_num, scaling_factor)
+      # G_LNA = self.cal_GainCircuit(Stop_freq, Start_freq,plot_num, scaling_factor)
 
        
        ylabel = "Electrical Field Strength [dBuV/m]"
@@ -862,16 +952,16 @@ class GUIOptions():
     def calibrateDataNEW(self, reduced_data, Cfreq, Stop_freq, Start_freq, color_data_set, scaling_factor, plot_num):
        scaling_factor = len(Cfreq)*scaling_factor
        CCF = self.get_CCF(scaling_factor, Stop_freq, Start_freq,  plot_num)
-       G_LNA = self.cal_GainCircuit(Stop_freq, Start_freq,plot_num, scaling_factor)
+       G_LNA = self.cal_GainCircuit(Stop_freq, Start_freq,plot_num, Cfreq[0],scaling_factor)
 
        
        ylabel = "Electrical Field Strength [dBuV/m]"
        if self.original == True:
-           Spec = self.calCCFdBuvPerM_Original(reduced_data, CCF, self.head[plot_num].cablecalib, G_LNA, self.head[plot_num].antennacalib)
+           Spec = self.calCCFdBuvPerM_Original(reduced_data, CCF, self.head[plot_num][Cfreq[0]].cablecalib, G_LNA, self.head[plot_num].antennacalib)
            self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
            #self.original = False
        else:
-           Spec = self.calCCFdBuvPerM(reduced_data, CCF, self.head[plot_num].cablecalib, G_LNA, self.head[plot_num].antennacalib)
+           Spec = self.calCCFdBuvPerM(reduced_data, CCF, self.head[plot_num][Cfreq[0]].cablecalib, G_LNA, self.head[plot_num][Cfreq[0]].antennacalib)
            self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
        
   #     return Spec
