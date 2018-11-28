@@ -23,6 +23,7 @@ import pandas as pd
 import sys
 import time
 from tkinter import *
+from tkinter import ttk
 from tkinter import scrolledtext
 from scipy.interpolate import spline
 from tkinter import messagebox as tkMessageBox
@@ -39,10 +40,10 @@ import traceback
 from matplotlib.widgets import Lasso
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
- 
+import reduceData 
 
 from numba import vectorize
-import threading 
+
 from functools import reduce
 #from tkinter import Label, Button, Radiobutton, IntVar
 maxleg = 'max'
@@ -154,82 +155,16 @@ class GUI_set_up():
         self.dir_button_frame = Frame(self.bottom_frame)
         self.dir_button_frame.pack(side=RIGHT)
         self.newRBW_button_frame = Frame(self.top_frame)
+        self.newRBW_button_frame.pack(side=LEFT)
+        self.newRBW_button_frame = Frame(self.top_frame)
         self.newRBW_button_frame.pack(side=BOTTOM)
         self.options    = GUIOptions(self.options_frame,self)
         
-class ReduceData(threading.Thread):
-    FreqMaxMinValues = {}
-    #MinValues = {}
-    lock = threading.Lock()
-    
-    def __init__(self,original_data,Cfreq, plot_num, scaling_factor, bw):
-        threading.Thread.__init__(self)
-        self.original_data = original_data
-        self.Cfreq = Cfreq   
-        self.plot_num = plot_num
-        self.scaling_factor = scaling_factor
-        self.bw = bw
-        ReduceData.lock.acquire()
-        ReduceData.FreqMaxMinValues[Cfreq] = []
-        ReduceData.lock.release()
 
-    def read_reduce_Data(self):
-        # read in the whole BW in one array
-# set the display sample size depending on the display bandwidth and resolution  
-     #   t0 = time.time()
-        spec = self.dBuV_M2V_M(self.original_data)
-        #freq = spectrum[0]
-        x = int(len(self.original_data)/self.scaling_factor)
-        spec_min = np.array([], dtype=np.float32)
-        spec_max = np.array([], dtype=np.float32)
-        freq = np.array([], dtype=np.float32)
-        #freq_max = np.array([], dtype=np.float32)
-        #bw = self.head[self.plot_num].bandwidth
-        Start_freq = self.Cfreq -self.bw/2
-        Stop_freq = self.Cfreq +self.bw/2
-        spec_max = [np.max(spec[(i*x):(x*i+x)]) for i in range (self.scaling_factor)]
-        #ind_max  = [(np.argmax(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
-        spec_min = [np.min(spec[(i*x):(x*i+x)]) for i in range (self.scaling_factor)]
-        #ind_min  = [(np.argmin(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
-        #freq_max = [freq[value] for count, value in enumerate(ind_max)]
-        #freq_min = [freq[value] for count, value in enumerate(ind_min)]
-            #self.leg_data = [spec_max, spec_min] 
-        spec_max = self.V_M2dBuV_M(spec_max)
-        spec_min = self.V_M2dBuV_M(spec_min)
-        freq = np.linspace(Start_freq,Stop_freq,len(spec_max)) 
-        temp = freq,spec_max,spec_min
-        ReduceData.lock.acquire()
-        ReduceData.FreqMaxMinValues[self.Cfreq] = temp#np.array(temp, dtype=np.float32)
-        #ReduceData.q.put(np.array(temp, dtype=np.float32))
-        ReduceData.lock.release()
-       # data = np.array(temp, dtype=np.float32)
-       # print(time.time)
-      #  return data       
-    
-    def dBuV_M2V_M(self,spec):
-        VperM = pow(10,(spec-120)/20)
-        return VperM    
-    
-    def V_M2dBuV_M(self,spec):
-        dBuV_M = 20*np.log10(spec)+120
-        return dBuV_M  
-    
-class plotInfo():
-    def __init__(self):
-        self.newWindow = Tk()
-        self.newWindow.mainloop()
-        def createWindow(self, txt):
-            scroll_txt = scrolledtext.ScrolledText(self.newWindow,width=40,height=10).pack()
-            print(txt)
-            scroll_txt.insert(INSERT, txt)
-        def deleteWindow(self):
-            self.newWindow.destroy()
         
 class GUIOptions():
     
     def __init__(self,root,parent):
-        
-        
         
         self.root = root
         self.parent = parent
@@ -245,23 +180,10 @@ class GUIOptions():
         self.max_plot = []
         self.min_plot = []
 
-        
-        #tab1 = Frame(tab_control)
-        #tab1.pack()
-        #tab2 = Frame(tab_control)
-        #tab2.pack()
-        
+
         #create headerfile
         self.head[plotNumber[0]] = {}
-        #self.head[plotNumber[1]] = mpifrRFIHeader.HeaderInformation()
-        # load CCF now not need to load every time you get the CCF of every 40MHz chunck
-        
-        #self.dataFile = []
         self.Filename = []
-        #self.headerInfo = []
-       # self.CFreq = 0
-        #self.CFreq2 = 0
-        
         
         self.zoom_Start_freq=0
         self.zoom_Stop_freq=0
@@ -270,16 +192,25 @@ class GUIOptions():
         self.zoom_trigger = False
         self.original = False
         
-        self.mode_select_frame = Frame(self.root,pady=20)
-        self.mode_select_frame.pack(side=TOP,fill=X,expand=1)
-        self.ax_opts_frame = Frame(self.root)
-        self.ax_opts_frame.pack(side=TOP,expand=1)
-        self.view_toggle_frame = Frame(self.root,pady=20)
-        self.view_toggle_frame.pack(side=TOP,fill=X,expand=1)
+        tab_control = ttk.Notebook(self.root)
+        plot1 = Frame(tab_control)
+        self.textArea = scrolledtext.ScrolledText(plot1, height=10, width=50, wrap=WORD)
+        plot2 = Frame(tab_control)
+        self.textArea2 = scrolledtext.ScrolledText(plot2, height=10, width=50, wrap=WORD)
+        #scr = Scrollbar(tab1, command=self.textArea.yview)
         
+        self.textArea.focus_set()
+        self.textArea.pack(side=LEFT, fill=Y)
+        
+        self.textArea2.focus_set()
+        self.textArea2.pack(side=LEFT, fill=Y)
+        
+        tab_control.add(plot1,text=plotNumber[0])
+        tab_control.add(plot2,text=plotNumber[1])
+        tab_control.pack(side=LEFT, anchor=W, padx=90)
+
         self.newRWB_entry_data = self.new_res_BW()
-        
-        
+         
         # button to get new BW of the display resolution 
         
         self.newRBW_opts_frame = Frame(self.parent.newRBW_button_frame)
@@ -441,18 +372,12 @@ class GUIOptions():
         return tempID
         
     def dump_filenames(self, plot_num, color):
-#Load in vereything and seperate header and data file
-      #  if self.zoom_trigger:
-       #     self.clear_plot()
-      #      self.zoom_trigger = Fa
-#            self.zoom_trigger1 = False
-#            self.zoom_trigger2 = False
-   #     self.zoom_trigger = not self.zoom_trigger
+#Load and check if the datafiles correspond to the headerfiles
+        # sort the file as well
         dataFile = []
         headerFile = []    
         dataFileTEST = []
-        head = mpifrRFIHeader.HeaderInformation()
-        txtWindow = plotInfo()
+        
    #     print(self.zoom_trigger)
         for i in range(len(self.Filename)): 
             if self.Filename[i].endswith(".rfi"):
@@ -461,72 +386,69 @@ class GUIOptions():
                 dataFileTEST.append(self.Filename[i])
                 
         
-        tem = self.GetCF(dataFileTEST, headerFile, plot_num)
+        Cfreq = self.GetCF(dataFileTEST, headerFile, plot_num)
         
-        tem, headerFile = self.sortList(tem, headerFile)
+        Cfreq, headerFile = self.sortList(Cfreq, headerFile)
         
-        tempID2 = head.getDataID(headerFile)
+        tempID2 = self.getDataID(headerFile)
         
         dataFile = [self.directory+'/'+str(ID)+'.npy' for cnt, ID in enumerate(tempID2)]
+        t0 = time.time()
         self.checkShameHeader_Data(dataFile,headerFile)
-        Cfreq = tem
-        msg = []
-        for cnt in range(len(tem)):
-            self.head[plot_num][tem[cnt]] = self.printHeaderInfoNEW(dataFile[cnt],headerFile[cnt], plot_num, tem[cnt])   
+        self.saveHeaderFile(dataFile, headerFile, plot_num, Cfreq)
+        self.plotDumpData(dataFile, headerFile, plot_num, Cfreq,color)
+        self.displayHeaderFile(dataFile, headerFile, plot_num, Cfreq)
+        print(time.time()-t0)
         
+    def saveHeaderFile(self, dataFile, headerFile, plot_num, Cfreq):
+        # store data in object
+        for cnt in range(len(Cfreq)):
+            self.head[plot_num][Cfreq[cnt]] = self.printHeaderInfoNEW(dataFile[cnt],headerFile[cnt], plot_num, Cfreq[cnt])   
+        
+    def displayHeaderFile(self, dataFile, headerFile, plot_num, Cfreq):
+        # display headerinfo in tab
         file2 = open(headerFile[0], "r")
+        self.textArea.delete('1.0', END)
         headerInfo = file2.readlines()
-        msg = [x for x in headerInfo]
-            #msg.append(x)
-        txtWindow.newWindow(msg)
-        tkMessageBox.showinfo(title = "Acquisition information", message = msg)   
-            
+        [self.textArea.insert(END, i) for i in headerInfo]
+        # another way of displaying info
+        # tkMessageBox.showinfo(title = "Acquisition information", message = msg)   
+        
+    def plotDumpData(self, dataFile, headerFile, plot_num, Cfreq,color):
+        # plot data using thread
         bw = self.head[plot_num][Cfreq[0]].bandwidth
         nSample = self.head[plot_num][Cfreq[0]].nSample
-        Start_freq = min(tem) - bw/2
-        Stop_freq = max(tem) + bw/2
+        Start_freq = min(Cfreq) - bw/2
+        Stop_freq = max(Cfreq) + bw/2
         self.xlim_Start_freq = Start_freq/1e6
         self.xlim_Stop_freq = Stop_freq/1e6
+        print('start freq one: %f'%Start_freq)
         
-        #self.head[plot_num].dataFile =  dataFile
-        #self.head[plot_num].headerFile =  headerFile
+        plotDataStore[plot_num] = dataFile, headerFile, Cfreq, self.head[plot_num]
         
-        plotDataStore[plot_num] = dataFile, headerFile,tem, self.head[plot_num]
-        #self.dataFile = dataFile
-        #self.headerFile = headerFile
-        
-        dataFile = [dataFile[i] for i in range(len(dataFile)) if tem[i] <= 6000*1e6 and tem[i] >= 100*1e6]
-        te = [tem[i] for i in range(len(tem)) if tem[i] <= 6000*1e6 and tem[i] >= 100*1e6]
-        
-        Start_freq = min(te) - bw/2
-        Stop_freq = max(te) + bw/2
-        #self.Start_freq = Start_freq
-        #self.Stop_freq = Stop_freq 
+        dataFile = [dataFile[i] for i in range(len(dataFile)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
+        Cfreq2 = [Cfreq[i] for i in range(len(Cfreq)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
         
         fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
         factors = sorted(i for i in fact if i >= 40)
         scaling_factor = factors[0]
         threads = []
-        t0 = time.time()
-        for cnt, Cfreq in enumerate(te):
+        for cnt, Cfreq3 in enumerate(Cfreq2):
             
             #data = self.head.readFromFile(headerFile[cnt])
             original_data = self.loadDataFromFileOLD(dataFile[cnt])
-            thread = ReduceData(original_data,Cfreq, plot_num, scaling_factor, bw)
+            thread = reduceData.ReduceData(original_data,Cfreq3, plot_num, scaling_factor, bw)
             thread.start()
             thread.read_reduce_Data()
-            threads.append(thread.FreqMaxMinValues[Cfreq])
-            
-        print(time.time()-t0)
-        
+            threads.append(thread.FreqMaxMinValues[Cfreq3])
+       
         threads = np.array(threads, dtype='float32')
         freq = threads[:,0,:].flatten() 
         specMax = threads[:,1,:].flatten()
         specMin = threads[:,2,:].flatten()
-        print(freq)
         temp = freq, specMax, specMin  
         temp = np.array(temp)
-        self.calibrateDataNEW(temp,te, Stop_freq, Start_freq, color, scaling_factor, plot_num)
+        self.calibrateDataNEW(temp,Cfreq2, Stop_freq, Start_freq, color, scaling_factor, plot_num)
         self.fig_plot.set_ylim(-50, 100)
         self.fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
         self.canvas.draw()  
@@ -547,7 +469,7 @@ class GUIOptions():
             #data = self.head.readFromFile(headerFile[cnt])
                 new_Cfreq = np.append(new_Cfreq, Cfreq) 
                 original_data = self.loadDataFromFileOLD(dataFile[cnt])
-                thread = ReduceData(original_data,Cfreq, plot_num, scaling_factor, bw)
+                thread = reduceData.ReduceData(original_data,Cfreq, plot_num, scaling_factor, bw)
                 thread.start()
                 thread.read_reduce_Data()
                 threads.append(thread.FreqMaxMinValues[Cfreq])
