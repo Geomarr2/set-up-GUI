@@ -42,6 +42,8 @@ class HeaderInformation(object):
         self.genScanID()
         self.dataFile = []
         self.headerFile = []
+        self.CCF = []
+        self.G_lna = []
         
         
     def createFilename(self, directory  = os.getcwd()):

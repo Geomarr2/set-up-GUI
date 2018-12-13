@@ -34,6 +34,14 @@ class ReduceData(threading.Thread):
         spec_max = [np.max(spec[(i*x):(x*i+x)]) for i in range (self.scaling_factor)]
         #ind_max  = [(np.argmax(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
         spec_min = [np.min(spec[(i*x):(x*i+x)]) for i in range (self.scaling_factor)]
+        
+       # spec_max = [np.max(spec[(i*self.scaling_factor):(self.scaling_factor*i+self.scaling_factor)]) for i in range (x)]
+        #ind_max  = [(np.argmax(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
+      #  spec_min = [np.min(spec[(i*self.scaling_factor):(self.scaling_factor*i+self.scaling_factor)]) for i in range (x)]
+        
+        
+        
+        
         #ind_min  = [(np.argmin(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
         #freq_max = [freq[value] for count, value in enumerate(ind_max)]
         #freq_min = [freq[value] for count, value in enumerate(ind_min)]

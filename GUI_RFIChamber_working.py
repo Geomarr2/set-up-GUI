@@ -39,7 +39,7 @@ import RFIHeaderFile
 #from tkinter import Label, Button, Radiobutton, IntVar
 
 FileCCF="CCF4.csv"
-PathCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF4.csv"
+PathCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF.csv"
 PathGainCircuit = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/RFIChamberMeasure/RFcable/GainCircuit.csv"
 FileGainCircuit = "GainCircuit.csv"
 fields = 'Path', 'Filename', 'Start Frequency (MHz)', 'Stop Frequency (MHz)', 'LNA gain (dB)', 'Cable losses (dB)','Antenna efficiency'

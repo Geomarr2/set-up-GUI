@@ -48,27 +48,22 @@ from functools import reduce
 #from tkinter import Label, Button, Radiobutton, IntVar
 maxleg = 'max'
 minleg = 'min'
-#colorbg= "#d469a3"
-#FileCCF="CCF4.csv"
+
 PATHCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF4.csv"
 PATHGAINCIRCUIT = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/RFIChamberMeasure/RFcable/GainCircuitNew.csv"
-#FileGainCircuit = "GainCircuit.csv"
-#fields = 'Path', 'Filename', 'Start Frequency (MHz)', 'Stop Frequency (MHz)', 'LNA gain (dB)', 'Cable losses (dB)','Antenna efficiency'
+
 fields_zoom = "Start Frequency (MHz): ", "Stop Frequency (MHz): ","Maximum amplitude: ","Minimum amplitude: "
 zoom_values = ['1000', '1150', '10', '-30']
-#AcqBW = 40e6
-plotDataStore = {}
-plotNumber = 'Load data set one', 'Load data set two' 
 
-test = 0
+plotDataStore = {}
+plotNumber = 'Load data set one','Load data set two'
+NumberOfPlot = 0
+
+headInfo = {}
 
 color_set1 = ['b','c','m']
 color_set2 = ['r','pink','g']
 
-CCFFile = TemporaryFile()
-CCFtemp = []
-Gaintemp = []
-testdataset1 = []
 
 #---------Plotting constants------#
 DEFAULT_XAXIS   = "P_bary (ms)"
@@ -134,15 +129,9 @@ class GUI_set_up():
         self.bottom_frame = Frame(self.root)
         self.bottom_frame.pack(side=BOTTOM)
         
-        #self.text_frame = Frame(self.root)
-        #self.text_frame.pack()
         
         self.top_frame_plot = Frame(self.root)
         self.top_frame_plot.pack(side=LEFT)
-        self.plot_frame_toolbar = Frame(self.top_frame_plot)
-        self.plot_frame_toolbar.pack(side=TOP)
-        self.plot_frame = Frame(self.top_frame_plot)
-        self.plot_frame.pack(side=TOP)
         
         self.options_frame = Frame(self.top_frame) 
         self.options_frame.pack(side=LEFT)
@@ -150,20 +139,21 @@ class GUI_set_up():
         
         self.input_frame = Frame(self.top_frame)
         self.input_frame.pack(side=TOP)
+        
         self.buttons_frame = Frame(self.top_frame_plot)
         self.buttons_frame.pack(side=RIGHT)
+        
         self.dir_button_frame = Frame(self.bottom_frame)
         self.dir_button_frame.pack(side=RIGHT)
-        self.newRBW_button_frame = Frame(self.top_frame)
-        self.newRBW_button_frame.pack(side=LEFT)
-        self.newRBW_button_frame = Frame(self.top_frame)
-        self.newRBW_button_frame.pack(side=BOTTOM)
+        
+        self.zoom_button_frame = Frame(self.top_frame)
+        self.zoom_button_frame.pack(side=BOTTOM)
         self.options    = GUIOptions(self.options_frame,self)
         
 
         
 class GUIOptions():
-    
+    headTemp  = {}
     def __init__(self,root,parent):
         
         self.root = root
@@ -182,7 +172,7 @@ class GUIOptions():
 
 
         #create headerfile
-        self.head[plotNumber[0]] = {}
+        
         self.Filename = []
         
         self.zoom_Start_freq=0
@@ -191,29 +181,27 @@ class GUIOptions():
         self.zoom_min=0
         self.zoom_trigger = False
         self.original = False
-        
-        tab_control = ttk.Notebook(self.root)
-        plot1 = Frame(tab_control)
-        self.textArea = scrolledtext.ScrolledText(plot1, height=10, width=50, wrap=WORD)
-        plot2 = Frame(tab_control)
-        self.textArea2 = scrolledtext.ScrolledText(plot2, height=10, width=50, wrap=WORD)
-        #scr = Scrollbar(tab1, command=self.textArea.yview)
-        
-        self.textArea.focus_set()
-        self.textArea.pack(side=LEFT, fill=Y)
-        
-        self.textArea2.focus_set()
-        self.textArea2.pack(side=LEFT, fill=Y)
-        
-        tab_control.add(plot1,text=plotNumber[0])
-        tab_control.add(plot2,text=plotNumber[1])
-        tab_control.pack(side=LEFT, anchor=W, padx=90)
+        mygreen = "#d2ffd2"
+        myred = "#dd0202"
 
+        style = ttk.Style()
+
+        style.theme_create( "yummy", parent="alt", settings={
+        "TNotebook": {"configure": {"tabmargins": [2, 5, 2, 0] } },
+        "TNotebook.Tab": {
+            "configure": {"padding": [5, 1], "background": mygreen },
+            "map":       {"background": [("selected", myred)],
+                          "expand": [("selected", [1, 1, 1, 0])] } } } )
+        style.theme_use("yummy")
+
+        self.tab_control = ttk.Notebook(self.root,height=125, width=400)
+        self.tab_control.pack(side=LEFT, anchor=W, padx=90)
+        
         self.newRWB_entry_data = self.new_res_BW()
          
         # button to get new BW of the display resolution 
         
-        self.newRBW_opts_frame = Frame(self.parent.newRBW_button_frame)
+        self.newRBW_opts_frame = Frame(self.parent.zoom_button_frame)
         
         self.newRBW_opts_frame.pack(side=RIGHT,fill=BOTH,expand=1)
 
@@ -268,10 +256,7 @@ class GUIOptions():
         self.submit_button = Button(self.bottom_frame,text=plotNumber[1],width=60,
                                        command=lambda self=self:self.dump_filenames(plotNumber[1], color_set2),
                                        **DEFAULT_STYLE_2).pack(side=RIGHT,anchor=SE)
-
-#    def gui_handler(self):
-#        change_state()
-#        threading.Thread(target=lambda self=self:self.dump_filenames(plotNumber[1], color_set2)).start()   
+        
     def GetCF(self,dataFile,headerFile, plot_num):
 #Load in all the header file get the info and the BW from max and min center freq
         
@@ -282,10 +267,9 @@ class GUIOptions():
         temp = np.array(temp).astype('float32')
         
         return temp
-
+    '''
     def printHeaderInfo(self,dataFile,headerFile, plot_num, Cfreq):
 #Load in all the header file get the info and the BW from max and min center freq
-       # d = 
         self.head[plot_num] = dict(zip(mpifrRFIHeader.HeaderInformation(Cfreq), [0 for i in range(len(Cfreq))]))
         print(self.head)
         if len(Cfreq) == len(dataFile):
@@ -318,7 +302,7 @@ class GUIOptions():
             tkMessageBox.showwarning('Warning','Data is missing')
         return msg
     
-    
+    '''
     def checkShameHeader_Data(self,HeaderFile,dataFile):
 #Load in all the header file get the info and the BW from max and min center freq
         if len(HeaderFile) != len(dataFile): 
@@ -328,7 +312,7 @@ class GUIOptions():
     def printHeaderInfoNEW(self,dataFile,headerFile, plot_num, Cfreq):
 #Load in all the header file get the info and the BW from max and min center freq
        # d = 
-        headTemp  = {}
+        headTemp = {}
         headTemp = mpifrRFIHeader.HeaderInformation()
         #print(self.head)
         #if len(headerFile) == len(dataFile):
@@ -396,17 +380,34 @@ class GUIOptions():
         t0 = time.time()
         self.checkShameHeader_Data(dataFile,headerFile)
         self.saveHeaderFile(dataFile, headerFile, plot_num, Cfreq)
+        headInfo.update(headInfo)
         self.plotDumpData(dataFile, headerFile, plot_num, Cfreq,color)
         self.displayHeaderFile(dataFile, headerFile, plot_num, Cfreq)
         print(time.time()-t0)
         
     def saveHeaderFile(self, dataFile, headerFile, plot_num, Cfreq):
         # store data in object
+        self.head[plot_num] = {}
         for cnt in range(len(Cfreq)):
             self.head[plot_num][Cfreq[cnt]] = self.printHeaderInfoNEW(dataFile[cnt],headerFile[cnt], plot_num, Cfreq[cnt])   
         
     def displayHeaderFile(self, dataFile, headerFile, plot_num, Cfreq):
         # display headerinfo in tab
+        plot = Frame(self.tab_control)
+        self.textArea = scrolledtext.ScrolledText(plot, height=10, width=50, wrap=WORD)
+        #plot2 = Frame(self.tab_control)
+        #self.textArea2 = scrolledtext.ScrolledText(plot2, height=10, width=50, wrap=WORD)
+        #scr = Scrollbar(tab1, command=self.textArea.yview)
+        
+        self.textArea.focus_set()
+        self.textArea.pack(side=LEFT, fill=Y)
+        
+        #self.textArea2.focus_set()
+        #self.textArea2.pack(side=LEFT, fill=Y)
+        
+        self.tab_control.add(plot,text=plot_num)
+        #self.tab_control.add(plot2,text=plotNumber[1])
+        
         file2 = open(headerFile[0], "r")
         self.textArea.delete('1.0', END)
         headerInfo = file2.readlines()
@@ -785,7 +786,7 @@ class GUIOptions():
     def new_res_BW(self):
         entries = {}
         for field in fields_zoom:
-            row = Frame(self.parent.newRBW_button_frame)
+            row = Frame(self.parent.zoom_button_frame)
             lab = Label(row, width=22, text=field, anchor='w')
             ent = Entry(row, width=22,bg="lightblue",
                                     fg="black",highlightcolor="lightblue",insertbackground="black",

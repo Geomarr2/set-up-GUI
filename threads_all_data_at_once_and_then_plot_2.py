@@ -41,34 +41,33 @@ from matplotlib.widgets import Lasso
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
 import reduceData 
-
+import getCCFandG_LNA
 from numba import vectorize
-
+import math
 from functools import reduce
 #from tkinter import Label, Button, Radiobutton, IntVar
+
+
+
 maxleg = 'max'
 minleg = 'min'
-#colorbg= "#d469a3"
-#FileCCF="CCF4.csv"
+
 PATHCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF4.csv"
 PATHGAINCIRCUIT = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/RFIChamberMeasure/RFcable/GainCircuitNew.csv"
-#FileGainCircuit = "GainCircuit.csv"
-#fields = 'Path', 'Filename', 'Start Frequency (MHz)', 'Stop Frequency (MHz)', 'LNA gain (dB)', 'Cable losses (dB)','Antenna efficiency'
+
 fields_zoom = "Start Frequency (MHz): ", "Stop Frequency (MHz): ","Maximum amplitude: ","Minimum amplitude: "
 zoom_values = ['1000', '1150', '10', '-30']
-#AcqBW = 40e6
+
 plotDataStore = {}
-plotNumber = 'Load data set one', 'Load data set two' 
 
-test = 0
 
-color_set1 = ['b','c','m']
-color_set2 = ['r','pink','g']
+headInfo = {}
 
-CCFFile = TemporaryFile()
-CCFtemp = []
-Gaintemp = []
-testdataset1 = []
+color_set1 = ['b','c','m', 'r','pink','g']
+
+dataTEST = []
+CCFTEST = []
+GainTEST = []
 
 #---------Plotting constants------#
 DEFAULT_XAXIS   = "P_bary (ms)"
@@ -105,6 +104,8 @@ DEFAULT_STYLE_NEW = {"foreground":"gray90","background":"darkgreen"}
 
 
 
+
+
 class NavSelectToolbar(NavigationToolbar2TkAgg): 
     def __init__(self, canvas,root,parent):
         self.canvas = canvas
@@ -134,15 +135,9 @@ class GUI_set_up():
         self.bottom_frame = Frame(self.root)
         self.bottom_frame.pack(side=BOTTOM)
         
-        #self.text_frame = Frame(self.root)
-        #self.text_frame.pack()
         
         self.top_frame_plot = Frame(self.root)
         self.top_frame_plot.pack(side=LEFT)
-        self.plot_frame_toolbar = Frame(self.top_frame_plot)
-        self.plot_frame_toolbar.pack(side=TOP)
-        self.plot_frame = Frame(self.top_frame_plot)
-        self.plot_frame.pack(side=TOP)
         
         self.options_frame = Frame(self.top_frame) 
         self.options_frame.pack(side=LEFT)
@@ -150,26 +145,29 @@ class GUI_set_up():
         
         self.input_frame = Frame(self.top_frame)
         self.input_frame.pack(side=TOP)
+        
         self.buttons_frame = Frame(self.top_frame_plot)
         self.buttons_frame.pack(side=RIGHT)
+                
+        
         self.dir_button_frame = Frame(self.bottom_frame)
         self.dir_button_frame.pack(side=RIGHT)
-        self.newRBW_button_frame = Frame(self.top_frame)
-        self.newRBW_button_frame.pack(side=LEFT)
-        self.newRBW_button_frame = Frame(self.top_frame)
-        self.newRBW_button_frame.pack(side=BOTTOM)
-        self.options    = GUIOptions(self.options_frame,self)
+        
+        self.zoom_button_frame = Frame(self.top_frame)
+        self.zoom_button_frame.pack(side=BOTTOM)
+        self.options    = GUIOptions(self.root,self)
         
 
         
 class GUIOptions():
-    
+    headTemp  = {}
     def __init__(self,root,parent):
         
         self.root = root
         self.parent = parent
         self.IntializePlot()
-        
+        self.plotNumber = 'Load data set  '
+        self.NumberOfPlot = 0
 
         self.directory = []
         self.head = {}
@@ -182,7 +180,7 @@ class GUIOptions():
 
 
         #create headerfile
-        self.head[plotNumber[0]] = {}
+        
         self.Filename = []
         
         self.zoom_Start_freq=0
@@ -191,46 +189,37 @@ class GUIOptions():
         self.zoom_min=0
         self.zoom_trigger = False
         self.original = False
-        
-        tab_control = ttk.Notebook(self.root)
-        plot1 = Frame(tab_control)
-        self.textArea = scrolledtext.ScrolledText(plot1, height=10, width=50, wrap=WORD)
-        plot2 = Frame(tab_control)
-        self.textArea2 = scrolledtext.ScrolledText(plot2, height=10, width=50, wrap=WORD)
-        #scr = Scrollbar(tab1, command=self.textArea.yview)
-        
-        self.textArea.focus_set()
-        self.textArea.pack(side=LEFT, fill=Y)
-        
-        self.textArea2.focus_set()
-        self.textArea2.pack(side=LEFT, fill=Y)
-        
-        tab_control.add(plot1,text=plotNumber[0])
-        tab_control.add(plot2,text=plotNumber[1])
-        tab_control.pack(side=LEFT, anchor=W, padx=90)
 
+        mygreen = "#d2ffd2"
+        myred = "#dd0202"
+        style = ttk.Style()
+
+        style.theme_create( "yummy", parent="alt", settings={
+        "TNotebook": {"configure": {"tabmargins": [2, 5, 2, 0] } },
+        "TNotebook.Tab": {
+            "configure": {"padding": [5, 1], "background": mygreen },
+            "map":       {"background": [("selected", myred)],
+                          "expand": [("selected", [1, 1, 1, 0])] } } } )
+        style.theme_use("yummy")
+        self.tab_control = ttk.Notebook(self.parent.buttons_frame,height=200, width=250)
+        self.tab_control.pack(side=TOP, anchor=W, pady=90)
+        
         self.newRWB_entry_data = self.new_res_BW()
          
         # button to get new BW of the display resolution 
         
-        self.newRBW_opts_frame = Frame(self.parent.newRBW_button_frame)
+        self.newRBW_opts_frame = Frame(self.parent.zoom_button_frame)
         
         self.newRBW_opts_frame.pack(side=RIGHT,fill=BOTH,expand=1)
 
         self.show_newRBW_button=self._custom_button(
-                self.newRBW_opts_frame,text = 'Replot '+plotNumber[0].lstrip('Load'), 
-                command=(lambda self=self:self.zoomActivate(plotNumber[0], color_set1)), 
+                self.newRBW_opts_frame,text = 'Replot ', 
+                command=(lambda self=self:self.zoomActivate(self.plotNumber, color_set1)), 
                 **DEFAULT_STYLE_2).pack(side=LEFT,anchor=SW, expand=1)  
         
-        self.show_newRBW_button=self._custom_button(
-                self.newRBW_opts_frame,text = 'Replot '+plotNumber[1].lstrip('Load'), 
-                command=(lambda self=self:self.zoomActivate(plotNumber[1], color_set2)), 
-                **DEFAULT_STYLE_2).pack(side=RIGHT,anchor=SE, expand=1) 
-
-        
-        
+  
         self.clear_opts_frame = Frame(self.parent.buttons_frame,pady=1)
-        self.clear_opts_frame.pack(side=TOP,fill=X,expand=1)
+        self.clear_opts_frame.pack(side=BOTTOM)
         self.clear_button=self._custom_button(
                 self.clear_opts_frame,text = 'Clear Plot', 
                 command=(lambda self=self: self.clear_plot_data()),
@@ -238,7 +227,7 @@ class GUIOptions():
         
         
         self.misc_opts_frame = Frame(self.parent.buttons_frame,pady=1)
-        self.misc_opts_frame.pack(side=TOP,fill=X,expand=1)
+        self.misc_opts_frame.pack(side=BOTTOM)
         self.quit_button = self._custom_button(
         self.misc_opts_frame,"Quit",
         self.quit,**DEFAULT_STYLE_3)
@@ -260,18 +249,10 @@ class GUIOptions():
         
         
         
-        self.submit_button = Button(self.bottom_frame,text=plotNumber[0],width=60,
-                                       command=lambda self=self:self.dump_filenames(plotNumber[0], color_set1),
+        self.submit_button = Button(self.bottom_frame,text=self.plotNumber,width=60,
+                                       command=lambda self=self:self.dump_filenames(self.plotNumber, color_set1),
                                        **DEFAULT_STYLE_2).pack(side=LEFT,anchor=SW) 
-        
-
-        self.submit_button = Button(self.bottom_frame,text=plotNumber[1],width=60,
-                                       command=lambda self=self:self.dump_filenames(plotNumber[1], color_set2),
-                                       **DEFAULT_STYLE_2).pack(side=RIGHT,anchor=SE)
-
-#    def gui_handler(self):
-#        change_state()
-#        threading.Thread(target=lambda self=self:self.dump_filenames(plotNumber[1], color_set2)).start()   
+  
     def GetCF(self,dataFile,headerFile, plot_num):
 #Load in all the header file get the info and the BW from max and min center freq
         
@@ -282,42 +263,6 @@ class GUIOptions():
         temp = np.array(temp).astype('float32')
         
         return temp
-
-    def printHeaderInfo(self,dataFile,headerFile, plot_num, Cfreq):
-#Load in all the header file get the info and the BW from max and min center freq
-       # d = 
-        self.head[plot_num] = dict(zip(mpifrRFIHeader.HeaderInformation(Cfreq), [0 for i in range(len(Cfreq))]))
-        print(self.head)
-        if len(Cfreq) == len(dataFile):
-            #temp = [np.load(value) for counter, value in enumerate(self.dataFile) for counterHeader, valueHeader in enumerate(temp) if value == (valueHeader+'.npy')]
-            for cnt in range(len(Cfreq)):
-                file2 = open(headerFile[cnt], "r")
-                headerInfo = file2.readlines()
-                msg = []
-                if headerInfo[6] != 'default\n' and headerInfo[8] != 'default\n' and headerInfo[18] != 'default\n' and headerInfo[20] != 'default\n'and headerInfo[22] != 'default\n'and headerInfo[24] != 'default\n':
-                    self.head[plot_num][str(Cfreq[cnt])].centerFrequency = float(headerInfo[4])
-                    self.head[plot_num][Cfreq[cnt]].bandwidth = float(headerInfo[6])
-                    self.head[plot_num][Cfreq[cnt]].chambercalib = headerInfo[18]
-                    self.head[plot_num][Cfreq[cnt]].antennacalib = float(headerInfo[20])
-                    self.head[plot_num][Cfreq[cnt]].cablecalib = float(headerInfo[22])
-                    self.head[plot_num][Cfreq[cnt]].lnaCalib = headerInfo[24]
-                    self.head[plot_num][Cfreq[cnt]].nSample = int(headerInfo[8])-1
-                else:
-                    headTemp[plot_num][str(Cfreq[cnt])].bandwidth = 40*1e6
-                    self.head[plot_num][cnt].chambercalib = PATHCCF 
-                    self.head[plot_num][cnt].antennacalib = 0.75
-                    self.head[plot_num][cnt].cablecalib = 1
-                    self.head[plot_num][cnt].lnaCalib = PATHGAINCIRCUIT
-                    self.head[plot_num][cnt].nSample = 373851-1
-                self.CCFdata = self.CCF_DatafileCSV(self.head[plot_num][cnt].chambercalib)    
-                for x in headerInfo:
-                    msg.append(x)
-                file2.close()
-                tkMessageBox.showinfo(title = "Acquisition information", message = msg)
-        else:
-            tkMessageBox.showwarning('Warning','Data is missing')
-        return msg
-    
     
     def checkShameHeader_Data(self,HeaderFile,dataFile):
 #Load in all the header file get the info and the BW from max and min center freq
@@ -328,7 +273,7 @@ class GUIOptions():
     def printHeaderInfoNEW(self,dataFile,headerFile, plot_num, Cfreq):
 #Load in all the header file get the info and the BW from max and min center freq
        # d = 
-        headTemp  = {}
+        headTemp = {}
         headTemp = mpifrRFIHeader.HeaderInformation()
         #print(self.head)
         #if len(headerFile) == len(dataFile):
@@ -339,7 +284,7 @@ class GUIOptions():
             
         if headerInfo[6] != 'default\n' and headerInfo[8] != 'default\n' and headerInfo[18] != 'default\n' and headerInfo[20] != 'default\n'and headerInfo[22] != 'default\n'and headerInfo[24] != 'default\n':
             headTemp.centerFrequency = float(headerInfo[4])
-            headTemp.bandwidth = float(headerInfo[6])
+            headTemp.bandwidth = round(float(headerInfo[6])/10e6)*10e6
             headTemp.chambercalib = headerInfo[18]
             headTemp.antennacalib = float(headerInfo[20])
             headTemp.cablecalib = float(headerInfo[22])
@@ -353,7 +298,8 @@ class GUIOptions():
             headTemp.cablecalib = 1
             headTemp.lnaCalib = PATHGAINCIRCUIT
             headTemp.nSample = 373851-1
-        self.CCFdata = self.CCF_DatafileCSV(headTemp.chambercalib)    
+        self.CCFdata = self.CCF_DatafileCSV(headTemp.chambercalib)  
+        self.GainCircuitData = self.cal_GainCircuit(headTemp.lnaCalib,max(self.CCFdata[:, 0]), min(self.CCFdata[:, 0]),plot_num, headTemp.centerFrequency,5900)#self.GainLNA_DatafileCSV(headTemp.lnaCalib)
         headTemp.dataFile = dataFile
         headTemp.headerFile = headerFile
         file2.close()
@@ -377,7 +323,12 @@ class GUIOptions():
         dataFile = []
         headerFile = []    
         dataFileTEST = []
-        
+        cnt = self.NumberOfPlot
+        color = [color[cnt], color[1+cnt]]
+        cnt = self.NumberOfPlot+1
+        self.NumberOfPlot = cnt
+        plot_num = self.plotNumber[:-1]+str(self.NumberOfPlot)
+        self.plotNumber = plot_num
    #     print(self.zoom_trigger)
         for i in range(len(self.Filename)): 
             if self.Filename[i].endswith(".rfi"):
@@ -396,17 +347,36 @@ class GUIOptions():
         t0 = time.time()
         self.checkShameHeader_Data(dataFile,headerFile)
         self.saveHeaderFile(dataFile, headerFile, plot_num, Cfreq)
+
+        headInfo.update(headInfo)
         self.plotDumpData(dataFile, headerFile, plot_num, Cfreq,color)
         self.displayHeaderFile(dataFile, headerFile, plot_num, Cfreq)
         print(time.time()-t0)
         
     def saveHeaderFile(self, dataFile, headerFile, plot_num, Cfreq):
         # store data in object
+
+        self.head[plot_num] = {}
         for cnt in range(len(Cfreq)):
             self.head[plot_num][Cfreq[cnt]] = self.printHeaderInfoNEW(dataFile[cnt],headerFile[cnt], plot_num, Cfreq[cnt])   
         
     def displayHeaderFile(self, dataFile, headerFile, plot_num, Cfreq):
         # display headerinfo in tab
+        plot = Frame(self.tab_control)
+        self.textArea = scrolledtext.ScrolledText(plot, height=10, width=50, wrap=WORD)
+        #plot2 = Frame(self.tab_control)
+        #self.textArea2 = scrolledtext.ScrolledText(plot2, height=10, width=50, wrap=WORD)
+        #scr = Scrollbar(tab1, command=self.textArea.yview)
+        
+        self.textArea.focus_set()
+        self.textArea.pack(side=LEFT, fill=Y)
+        
+        #self.textArea2.focus_set()
+        #self.textArea2.pack(side=LEFT, fill=Y)
+        
+        self.tab_control.add(plot,text=plot_num)
+        #self.tab_control.add(plot2,text=plotNumber[1])
+        
         file2 = open(headerFile[0], "r")
         self.textArea.delete('1.0', END)
         headerInfo = file2.readlines()
@@ -422,16 +392,16 @@ class GUIOptions():
         Stop_freq = max(Cfreq) + bw/2
         self.xlim_Start_freq = Start_freq/1e6
         self.xlim_Stop_freq = Stop_freq/1e6
-        print('start freq one: %f'%Start_freq)
         
-        plotDataStore[plot_num] = dataFile, headerFile, Cfreq, self.head[plot_num]
+        # this is used for ZOOM
+        plotDataStore[plot_num] = dataFile, headerFile, Cfreq, bw, nSample
         
         dataFile = [dataFile[i] for i in range(len(dataFile)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
         Cfreq2 = [Cfreq[i] for i in range(len(Cfreq)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
         
         fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
         factors = sorted(i for i in fact if i >= 40)
-        scaling_factor = factors[0]
+        scaling_factor = 100#factors[0]
         threads = []
         for cnt, Cfreq3 in enumerate(Cfreq2):
             
@@ -449,37 +419,37 @@ class GUIOptions():
         temp = freq, specMax, specMin  
         temp = np.array(temp)
         self.calibrateDataNEW(temp,Cfreq2, Stop_freq, Start_freq, color, scaling_factor, plot_num)
-        self.fig_plot.set_ylim(-50, 100)
+        #self.fig_plot.set_ylim(-50, 100)
         self.fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
         self.canvas.draw()  
         
-    def zoom_dump_data(self, scaling_factor,color, dataFile, CFFreq, plot_num):
+    def zoom_dump_data(self, scaling_factor,color, dataFile, Cfreq, plot_num):
         # original data start frequency and stop frequency and datafile
-        bw = self.head[plot_num].bandwidth
+        bw = self.head[plot_num][Cfreq[0]].bandwidth
         zoom_Start_freq_plot = self.zoom_Start_freq - bw
         zoom_Stop_freq_plot = self.zoom_Stop_freq + bw
         
-        dataFile = [dataFile[i] for i in range(len(dataFile)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6]
-        te = [CFFreq[i] for i in range(len(CFFreq)) if CFFreq[i] <= 6000*1e6 and CFFreq[i] >= 100*1e6] 
+        dataFile = [dataFile[i] for i in range(len(dataFile)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
+        te = [Cfreq[i] for i in range(len(Cfreq)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6] 
         threads = []
+        thread = 0
         new_Cfreq = np.array([], dtype = 'float32')
         t0 = time.time()
-        for cnt, Cfreq in enumerate(te):
-            if Cfreq >= zoom_Start_freq_plot and Cfreq <= zoom_Stop_freq_plot:
+        for cnt, CfreqVal in enumerate(te):
+            if CfreqVal >= zoom_Start_freq_plot and CfreqVal <= zoom_Stop_freq_plot:
             #data = self.head.readFromFile(headerFile[cnt])
-                new_Cfreq = np.append(new_Cfreq, Cfreq) 
+                new_Cfreq = np.append(new_Cfreq, CfreqVal) 
                 original_data = self.loadDataFromFileOLD(dataFile[cnt])
-                thread = reduceData.ReduceData(original_data,Cfreq, plot_num, scaling_factor, bw)
+                thread = reduceData.ReduceData(original_data,CfreqVal, plot_num, scaling_factor, bw)
                 thread.start()
                 thread.read_reduce_Data()
-                threads.append(thread.FreqMaxMinValues[Cfreq])
+                threads.append(thread.FreqMaxMinValues[CfreqVal])
             
         print(time.time()-t0)
         threads = np.array(threads, dtype='float32')
         freq = threads[:,0,:].flatten() 
         specMax = threads[:,1,:].flatten()
         specMin = threads[:,2,:].flatten()
-        print(freq)
         temp = freq, specMax, specMin  
         temp = np.array(temp)
         self.calibrateDataNEW(temp,new_Cfreq, zoom_Stop_freq_plot, zoom_Start_freq_plot, color, scaling_factor, plot_num)
@@ -487,16 +457,16 @@ class GUIOptions():
         self.fig_plot.set_ylim(self.zoom_min,self.zoom_max)
         self.fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
         self.canvas.draw()   
-        
-    def zoom_dump_data_org(self, color,headerFile, dataFile, CFFreq, scaling_factor, plot_num):
+       
+    def zoom_dump_data_org(self, color,headerFile, dataFile, CFFreq, nSample, plot_num):
         # original data start frequency and stop frequency and datafile
 
-        scaling_factor = int(self.head[plot_num].nSample)
+       # scaling_factor = int(self.head[plot_num][CFFreq[0]].nSample)
         original_data = []# np.array([], dtype='float32')
         d = []
         counter = []
         # I want to over sample
-        bw = self.head[plot_num].bandwidth
+        bw = round(self.head[plot_num][CFFreq[0]].bandwidth/10e6)*10e6
         zoom_Start_freq_plot = self.zoom_Start_freq - bw
         zoom_Stop_freq_plot = self.zoom_Stop_freq + bw
         Start_freq = min(CFFreq) - (20*1e6)
@@ -520,20 +490,20 @@ class GUIOptions():
         if len(temp) <= 2:
             
             original_data = self.loadDataFromFile_org(d[0], temp[0],plot_num)
-            self.calibrateData(original_data, temp[0]+bw/2, temp[0]-bw/2, color, scaling_factor, plot_num)
+            self.calibrateDataNEW(original_data,temp[0], temp[0]+bw/2, temp[0]-bw/2, color, nSample, plot_num)
     
             original_data = self.loadDataFromFile_org(d[1], temp[1],plot_num)
-            self.calibrateData(original_data, temp[1]+bw/2, temp[1]-bw/2, color, scaling_factor, plot_num)
+            self.calibrateDataNEW(original_data,temp[1], temp[1]+bw/2, temp[1]-bw/2, color, nSample, plot_num)
         else:   
             
             original_data = self.loadDataFromFile_org(d[0], temp[0],plot_num)
-            self.calibrateData(original_data, temp[0]+bw/2, temp[0]-bw/2, color, scaling_factor, plot_num)
+            self.calibrateDataNEW(original_data,temp[0], temp[0]+bw/2, temp[0]-bw/2, color, nSample, plot_num)
     
             original_data = self.loadDataFromFile_org(d[1], temp[1],plot_num)
-            self.calibrateData(original_data, temp[1]+bw/2, temp[1]-bw/2, color, scaling_factor, plot_num)
+            self.calibrateDataNEW(original_data,temp[1], temp[1]+bw/2, temp[1]-bw/2, color, nSample, plot_num)
             
             original_data = self.loadDataFromFile_org(d[2], temp[2],plot_num)
-            self.calibrateData(original_data, temp[2]+bw/2, temp[2]-bw/2, color, scaling_factor, plot_num)
+            self.calibrateDataNEW(original_data,temp[2], temp[2]+bw/2, temp[2]-bw/2, color, nSample, plot_num)
         
         self.fig_plot.set_ylim(self.zoom_min,self.zoom_max)
         self.fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
@@ -600,19 +570,40 @@ class GUIOptions():
         data =np.array(data, dtype = 'float32')    
         return data       
     
-    def get_CCF(self,scaling_factor, Stop_freq, Start_freq, plot_num): 
+    
+    # for the defined frequency range
+    def get_CCF(self, Stop_freq, Start_freq): 
        CCFdata = self.CCFdata
-       temp_spec = np.array([],dtype='float32')
+       #temp_spec = np.array([],dtype='float32')
        
-       CCFTemp = [CCFdata[cnt,1] for cnt, val in enumerate(CCFdata[:,0]) if val >= Start_freq and val <= Stop_freq]
-       CCFFreq = [CCFdata[cnt,0] for cnt, val in enumerate(CCFdata[:,0]) if CCFdata[cnt,0] >= Start_freq and CCFdata[cnt,0] <= Stop_freq]
+       CCFTemp = [CCFdata[cnt,1] for cnt, val in enumerate(CCFdata[:,0]) if val >= Start_freq and val < Stop_freq]
+       CCFFreq = [CCFdata[cnt,0] for cnt, val in enumerate(CCFdata[:,0]) if CCFdata[cnt,0] >= Start_freq and CCFdata[cnt,0] < Stop_freq]
        
-       x = np.linspace(Start_freq, Stop_freq, scaling_factor)
-       temp_spec = np.interp(x, CCFFreq, CCFTemp)
-       temp_spec2 = [x, temp_spec]
-       CCFtemp.append(temp_spec2)
-       return temp_spec
-   
+       temp_spec = [CCFFreq, CCFTemp]
+       temp = np.array(temp_spec, dtype='float32')
+       return temp
+       '''
+    def GainLNA_DatafileCSV(self,path):
+        data = np.array([])  
+        #temp_data = np.array([]) 
+        if path.endswith('\n'):
+            path = path[:-1]
+        f = open(path, "r")
+        row = f.readlines()
+        splitRow = [row[i].split(';') for i in range(len(row))]
+        data = [value for counter, value in enumerate(splitRow)]#(np.append(data, row) for row in csvdata)
+        
+        newData = [data[i] for i in range(len(data)) if 2 <= len(data[i])]
+        newDataTemp = np.array([newData[i] for i in range(1,len(newData))])
+        freq = newDataTemp[:,0]
+        dataG = (newDataTemp[:,1])
+        freq = [float(i.replace(',','.')) for i in freq]
+        dataG = [float(i.replace(',','.')) for i in dataG]
+        #temp = [freq,dataG]
+        GainLNA = self.rescale(freq, dataG) # equate CCF and gain same length
+        #GainLNA = np.array(temp).astype('float32')
+        return GainLNA   
+        '''
     def GainLNA_DatafileCSV(self,path):
         data = np.array([])  
         temp_data = np.array([]) 
@@ -632,33 +623,31 @@ class GUIOptions():
         temp = [freq,dataG]
         GainLNA = np.array(temp).astype('float32')
         return GainLNA
-   # @staticmethod    
-    def loadDataFromFile(self,dataFile, plot_num, scaling_factor, Cfreq, color):
-        spec = np.load(dataFile)
-        #freq = np.linspace(Cfreq-self.head[plot_num].bandwidth/2,Cfreq+self.head[plot_num].bandwidth/2,len(spec))
-        #temp = [freq,spec]
-        spec = np.array(spec, dtype=np.float32) 
-        Stopfreq = Cfreq+self.head[plot_num].bandwidth/2
-        Startfreq = Cfreq-self.head[plot_num].bandwidth/2
-        self.calibrateData(self.read_reduce_Data(spec,Cfreq, plot_num, scaling_factor), Stopfreq, Startfreq, color, scaling_factor, plot_num)
-
-  #      return np.array(spec, dtype=np.float32) 
     
+    def rescale(self, Temp, Freq):
+       x = np.linspace(100*1e6,6*1e9, 5900)
+       temp_spec = np.interp(x, Freq, Temp)
+       temp_spec2 = [x, temp_spec]
+       temp = np.array(temp_spec2, dtype='float32')
+       return temp
+   
+    def cal_GainCircuit(self, file, upperfreq, lowerfreq,plot_num, Cfreq,scaling_factor = 5900): 
+        # call circuitry gain here because you dont know what wiould be used for the second measurement
+       Gaintemp = []
+       self.GainCircuitData = self.GainLNA_DatafileCSV(file)
+
+       freqGain = (self.GainCircuitData[0,:])
+       newfreqGain = np.linspace(lowerfreq,upperfreq,scaling_factor)
+       testGain = np.interp(newfreqGain, freqGain, self.GainCircuitData[1,:])
+       y = newfreqGain, testGain
+       Gaintemp = np.resize(y, (2,len(testGain))).astype('float32')
+       return Gaintemp
+
     def loadDataFromFileOLD(self,dataFile):
         spec = np.load(dataFile)
-        #freq = np.linspace(Cfreq-self.head[plot_num].bandwidth/2,Cfreq+self.head[plot_num].bandwidth/2,len(spec))
-        #temp = [freq,spec]
-     #    self.calibrateData(self.read_reduce_Data(original_data,value, plot_num, scaling_factor), Stopfreq, Startfreq, color, scaling_factor, plot_num)
 
         return np.array(spec, dtype=np.float32) 
-    def loadDataFromFile_org(self,dataFile, Cfreq,plot_num):
-        spec = np.load(dataFile)
-        spec = spec[0:spec.size-1]
-        freq = np.linspace(Cfreq-self.head[plot_num].bandwidth/2,Cfreq+self.head[plot_num].bandwidth/2,self.head[plot_num].nSample)
-        temp = [freq,spec]
-        
-        return np.array(temp, dtype=np.float32) 
-    
+
     def launch_dir_finder(self):
         self.directory = tkFileDialog.askdirectory()
         Files=[] #list of files
@@ -682,28 +671,23 @@ class GUIOptions():
             i+=1
         return cfreq,headerFile
    
- 
-
-
     def zoomActivate(self, plot_num, color):
         t0 = time.time()
      #   if self.zoom_trigger == False:
      #       self.clear_plot()
-        #dataFile = plotDataStore[plot_num][0]
-        #headerFile = plotDataStore[plot_num][1]
+        plot_num = self.plotNumber
+        dataFile = plotDataStore[plot_num][0]
+        
+        headerFile = plotDataStore[plot_num][1]
+        print(headerFile)
         CFreq = plotDataStore[plot_num][2]
-        
-        nSample = getattr(plotDataStore[plot_num][3], 'nSample')
-        dataFile = getattr(plotDataStore[plot_num][3], 'dataFile')
-        headerFile = getattr(plotDataStore[plot_num][3], 'headerFile')
-        
+        bw = plotDataStore[plot_num][3]
+        nSample = plotDataStore[plot_num][4]
 
         self.zoom_trigger = True
-      #  self.zoom_trigger1 = True
         self.getZoomInput()
         fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
         factors = sorted(i for i in fact if i >= 40)
-        bw = self.head[plot_num].bandwidth
         zoom_Bandwidth = self.zoom_Stop_freq - self.zoom_Start_freq
         zoom_nr_smp = int(zoom_Bandwidth/(bw))
         if zoom_Bandwidth >= 35*1e6:
@@ -719,17 +703,15 @@ class GUIOptions():
             elif zoom_nr_smp < 37 and zoom_nr_smp >= 1 and zoom_Bandwidth > 40*1e6:
                 scaling_factor = factors[3]
                 self.zoom_dump_data(scaling_factor, color, dataFile, CFreq, plot_num)
-            elif zoom_Bandwidth <= bw+100:#zoom_nr_smp <= 1:
-                #plot orginal    
+            elif zoom_Bandwidth <= bw+100:
                 self.original = True
-                scaling_factor = 200000
-                # create a seperate original function
                 self.zoom_dump_data_org(color[2],headerFile, dataFile, CFreq, nSample, plot_num)
                 
         else: 
             tkMessageBox.showwarning(title="Warning", message="Maximum zoom bandwidth must be more than acquisition bandwidth which is %d MHz."%(int(round(self.head[plot_num].bandwidth/1e6))))
         t1 = time.time()
         print(t1 - t0)
+        
     def IntializePlot(self):
         self.figure = Figure(figsize=(17,10))
         self.fig_plot = self.figure.add_subplot(111)
@@ -740,7 +722,7 @@ class GUIOptions():
         self.toolbar.update()
         self.fig_plot.set_ylabel("Electrical Field Strength [dBuV/m]")#('Power [dBm]')
         self.fig_plot.set_xlabel("Frequency (MHz)" )#(resolution %.3f kHz)"%1)
-        self.cutsom_legend()
+        #self.cutsom_legend()
         
     def cutsom_legend(self):
         set1_max = mpatches.Patch(color=color_set1[0], label='Max data 1')
@@ -785,7 +767,7 @@ class GUIOptions():
     def new_res_BW(self):
         entries = {}
         for field in fields_zoom:
-            row = Frame(self.parent.newRBW_button_frame)
+            row = Frame(self.parent.zoom_button_frame)
             lab = Label(row, width=22, text=field, anchor='w')
             ent = Entry(row, width=22,bg="lightblue",
                                     fg="black",highlightcolor="lightblue",insertbackground="black",
@@ -821,16 +803,7 @@ class GUIOptions():
         if tkMessageBox.askokcancel("Combustible Lemon",msg):
             self.parent.root.destroy()    
     
-    def cal_GainCircuit(self, upperfreq, lowerfreq,plot_num, Cfreq,scaling_factor = 40): 
-        # call circuitry gain here because you dont know what wiould be used for the second measurement
-       print(upperfreq)
-       print(lowerfreq)
-       self.GainCircuitData = self.GainLNA_DatafileCSV(self.head[plot_num][Cfreq].lnaCalib)
-       freqGain = (self.GainCircuitData[0,:])
-       newfreqGain = np.linspace(lowerfreq,upperfreq,scaling_factor)
-       testGain = np.interp(newfreqGain, freqGain, self.GainCircuitData[1,:])
-       Gaintemp.append([newfreqGain, testGain])
-       return testGain 
+
 
      
     def calCCFdBuvPerM(self,spectrum, CCF, Lcable, G_LNA, antennaEfficiency): # returns in [dBuV/m]
@@ -839,9 +812,13 @@ class GUIOptions():
          Z0 = 377  # Impedance of freespace
          r = 1.0 # Distance DUT to Antenna
          antennaEfficiency = 0.75
+       #  temp = []
+          
+         #temp = -CCF-G_LNA + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0
+
          
-         temp = -CCF-G_LNA + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0
-         
+         temp= [(-CCF[1, cnt]-G_LNA[1, cnt] + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0) for cntMain, valMain in enumerate(spectrum[0, :]) for cnt, val in enumerate(CCF[0, :]) if valMain < (val + 1e6) and valMain >= val]
+         temp = temp[:-abs(len(spectrum[0])-len(temp))]
          return spectrum[0], spectrum[1]+temp, spectrum[2]+temp#, spectrum[3]+temp   
      
     def calCCFdBuvPerM_Original(self,spectrum, CCF, Lcable, G_LNA, antennaEfficiency): # returns in [dBuV/m]
@@ -853,7 +830,7 @@ class GUIOptions():
          
          temp = -CCF-G_LNA + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0
          return spectrum[0], spectrum[1]+temp 
-     
+    ''' 
     def calibrateData(self, reduced_data, Stop_freq, Start_freq, color_data_set, scaling_factor, plot_num):
        
        CCF = self.get_CCF(scaling_factor, Stop_freq, Start_freq,  plot_num)
@@ -870,24 +847,71 @@ class GUIOptions():
            self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
        
   #     return Spec
-  
+    '''  
+    
+    def trim(self, data, Stop_freq, Start_freq):
+        Temp = [data[1, cnt] for cnt, val in enumerate(data[0, :]) if val >= Start_freq and val <= Stop_freq]
+        Freq = [data[0, cnt] for cnt, val in enumerate(data[0, :]) if data[0, cnt] >= Start_freq and data[0, cnt] <= Stop_freq]
+        temp_spec = [Freq, Temp]
+        temp = np.array(temp_spec, dtype = 'float32')
+        return temp
+    
     def calibrateDataNEW(self, reduced_data, Cfreq, Stop_freq, Start_freq, color_data_set, scaling_factor, plot_num):
-       scaling_factor = len(Cfreq)*scaling_factor
-       CCF = self.get_CCF(scaling_factor, Stop_freq, Start_freq,  plot_num)
-       G_LNA = self.cal_GainCircuit(Stop_freq, Start_freq,plot_num, Cfreq[0],scaling_factor)
-
        
+     #  nSample = self.head[plot_num][Cfreq[0]].nSample
+    #   scaling_factor = len(Cfreq)*nSample
+       CCF = self.get_CCF(Stop_freq, Start_freq)
+       
+       G_lna = self.GainCircuitData#self.cal_GainCircuit(Stop_freq, Start_freq,plot_num, Cfreq[0],scaling_factor)
+
        ylabel = "Electrical Field Strength [dBuV/m]"
+       
+       trimCCF = self.trim(CCF, Stop_freq, Start_freq)
+       trimGlna = self.trim(G_lna, Stop_freq, Start_freq)
+       CCF = trimCCF#np.resize(trimCCF, (2, len(reduced_data[0])))
+       G_LNA = trimGlna#np.resize(trimGlna, (2, len(reduced_data[0])))
+       
+#       orgBatch = len(reduced_data[0, :])/len(Cfreq)
+#       newBatch = len(trimCCF[0, :])/len(Cfreq)
+       
+ #      if math.fmod(orgBatch, newBatch):
+#           incNR = int(orgBatch/newBatch) + 1
+ #      else: 
+ #          incNR = int(orgBatch/newBatch)
+   #    while incNR < len(trimCCF[0,:]):
+#           trimCCF[1].insert(incNR, trimCCF[1, incNr-1])
+ #          incNR = incNR +1
+      #CCF = [trimCCF[1, cnt] for cnt in range(len(trimCCF[0, :])) if cnt % incNR == 0]
+      # CCF = list(CCF.join(val + val * (cnt % incNR == 2) for cnt, val in enumerate(trimCCF)))
+    #   print(len(CCF))
+       '''
+       for cntMain, valMain in enumerate(trimCCF[0, :]): 
+           cnt = 0
+           for i, val in enumerate(reduced_data[0, :]):
+               if val < (valMain + 1e6) and val >= valMain:
+                   if cnt == incNR+1: 
+                       count = 1 +count
+                       G_LNA = np.append(G_LNA, trimGlna[1, cntMain]) #for i in range(incNR)] 
+                       CCF = np.append(CCF, trimCCF[1, cntMain]) #for i in range(incNR)] 
+                   G_LNA = np.append(G_LNA, trimGlna[1, cntMain])  
+                   CCF = np.append(CCF, trimCCF[1, cntMain]) 
+                   cnt = 1 +cnt
+              #print(cnt)
+                      #CCF = np.append(CCF, trimCCF[1, cntMain])
+        '''
+   #    CCF = np.array(CCF, dtype='float32')
+    #   G_LNA = np.array(G_LNA, dtype= 'float32')
+       print(CCF[0,:])
        if self.original == True:
-           Spec = self.calCCFdBuvPerM_Original(reduced_data, CCF, self.head[plot_num][Cfreq[0]].cablecalib, G_LNA, self.head[plot_num].antennacalib)
+           Spec = self.calCCFdBuvPerM_Original(reduced_data, CCF, self.head[plot_num][Cfreq].cablecalib, G_LNA, self.head[plot_num][Cfreq].antennacalib)
+         
            self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
            #self.original = False
        else:
            Spec = self.calCCFdBuvPerM(reduced_data, CCF, self.head[plot_num][Cfreq[0]].cablecalib, G_LNA, self.head[plot_num][Cfreq[0]].antennacalib)
+           
            self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
        
-  #     return Spec
-   
 
     def getZoomInput(self):
        # print(self.newRWB_entry_data["Start Frequency (MHz): "].get())
@@ -912,7 +936,7 @@ class GUIOptions():
             self.max_plot, =self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[1], color=color[0])
             self.min_plot, = self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[2], color=color[1])
 
-            
+    '''           
 class CandidateFinder(object):
     def __init__(self):
         self.filenames = []
@@ -1003,10 +1027,24 @@ class CandidateFinder(object):
             info[key]=value
         return info
  
-    
+        '''
 if __name__ == '__main__':
    root = Tk()
    root.tk_setPalette(**DEFAULT_PALETTE)
    start = GUI_set_up(root)
+   CCFdata = start.options.CCF_DatafileCSV(PATHCCF)
+   temp_spec = np.array([],dtype='float32')
+   Start_freq = 100*1e6
+   Stop_freq = 6000*1e6  
+   nSample = 3555555
+   fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
+   factors = sorted(i for i in fact if i >= 40)
+   scaling_factor = factors[0]
+   CCFTemp = [CCFdata[cnt,1] for cnt, val in enumerate(CCFdata[:,0]) if val >= Start_freq and val <= Stop_freq]
+   CCFFreq = [CCFdata[cnt,0] for cnt, val in enumerate(CCFdata[:,0]) if CCFdata[cnt,0] >= Start_freq and CCFdata[cnt,0] <= Stop_freq]
+       
+   x = np.linspace(Start_freq, Stop_freq, scaling_factor)
+   temp_spec = np.interp(x, CCFFreq, CCFTemp)
+   temp_spec2 = [x, temp_spec]
 
    root.mainloop() 
