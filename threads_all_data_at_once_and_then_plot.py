@@ -49,7 +49,7 @@ from functools import reduce
 maxleg = 'max'
 minleg = 'min'
 
-PATHCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF4.csv"
+PATHCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF.csv"
 PATHGAINCIRCUIT = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/RFIChamberMeasure/RFcable/GainCircuitNew.csv"
 
 fields_zoom = "Start Frequency (MHz): ", "Stop Frequency (MHz): ","Maximum amplitude: ","Minimum amplitude: "
@@ -425,7 +425,7 @@ class GUIOptions():
         self.xlim_Stop_freq = Stop_freq/1e6
         print('start freq one: %f'%Start_freq)
         
-        plotDataStore[plot_num] = dataFile, headerFile, Cfreq, self.head[plot_num]
+        plotDataStore[plot_num] = dataFile, headerFile, Cfreq,nSample, bw#, self.head[plot_num]
         
         dataFile = [dataFile[i] for i in range(len(dataFile)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
         Cfreq2 = [Cfreq[i] for i in range(len(Cfreq)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
@@ -454,9 +454,9 @@ class GUIOptions():
         self.fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
         self.canvas.draw()  
         
-    def zoom_dump_data(self, scaling_factor,color, dataFile, CFFreq, plot_num):
+    def zoom_dump_data(self, scaling_factor,color, dataFile, CFFreq, plot_num, bw):
         # original data start frequency and stop frequency and datafile
-        bw = self.head[plot_num].bandwidth
+        #bw = self.head[plot_num].bandwidth
         zoom_Start_freq_plot = self.zoom_Start_freq - bw
         zoom_Stop_freq_plot = self.zoom_Stop_freq + bw
         
@@ -474,7 +474,6 @@ class GUIOptions():
                 thread.start()
                 thread.read_reduce_Data()
                 threads.append(thread.FreqMaxMinValues[Cfreq])
-            
         print(time.time()-t0)
         threads = np.array(threads, dtype='float32')
         freq = threads[:,0,:].flatten() 
@@ -489,10 +488,10 @@ class GUIOptions():
         self.fig_plot.set_xlim(self.zoom_Start_freq/1e6,self.zoom_Stop_freq/1e6)
         self.canvas.draw()   
         
-    def zoom_dump_data_org(self, color,headerFile, dataFile, CFFreq, scaling_factor, plot_num):
+    def zoom_dump_data_org(self, color,headerFile, dataFile, CFFreq, scaling_factor, plot_num, bw, nSample):
         # original data start frequency and stop frequency and datafile
 
-        scaling_factor = int(self.head[plot_num].nSample)
+        scaling_factor = int(nSample)
         original_data = []# np.array([], dtype='float32')
         d = []
         counter = []
@@ -611,7 +610,7 @@ class GUIOptions():
        x = np.linspace(Start_freq, Stop_freq, scaling_factor)
        temp_spec = np.interp(x, CCFFreq, CCFTemp)
        temp_spec2 = [x, temp_spec]
-       CCFtemp.append(temp_spec2)
+#       CCFtemp.append(temp_spec2)
        return temp_spec
    
     def GainLNA_DatafileCSV(self,path):
@@ -694,9 +693,9 @@ class GUIOptions():
         #headerFile = plotDataStore[plot_num][1]
         CFreq = plotDataStore[plot_num][2]
         
-        nSample = getattr(plotDataStore[plot_num][3], 'nSample')
-        dataFile = getattr(plotDataStore[plot_num][3], 'dataFile')
-        headerFile = getattr(plotDataStore[plot_num][3], 'headerFile')
+        nSample = plotDataStore[plot_num][3]
+        dataFile = plotDataStore[plot_num][0]
+        headerFile = plotDataStore[plot_num][1]
         
 
         self.zoom_trigger = True
@@ -704,28 +703,28 @@ class GUIOptions():
         self.getZoomInput()
         fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
         factors = sorted(i for i in fact if i >= 40)
-        bw = self.head[plot_num].bandwidth
+        bw = plotDataStore[plot_num][4]
         zoom_Bandwidth = self.zoom_Stop_freq - self.zoom_Start_freq
         zoom_nr_smp = int(zoom_Bandwidth/(bw))
         if zoom_Bandwidth >= 35*1e6:
             if zoom_nr_smp > 111:
                 scaling_factor = factors[0]
-                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq,plot_num)
+                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq,plot_num, bw)
             elif zoom_nr_smp < 111 and zoom_nr_smp >= 74:
                 scaling_factor = factors[1]
-                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq, plot_num)
+                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq, plot_num, bw)
             elif zoom_nr_smp < 74 and zoom_nr_smp >= 37:
                 scaling_factor = factors[2]
-                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq, plot_num)
+                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq, plot_num, bw)
             elif zoom_nr_smp < 37 and zoom_nr_smp >= 1 and zoom_Bandwidth > 40*1e6:
                 scaling_factor = factors[3]
-                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq, plot_num)
+                self.zoom_dump_data(scaling_factor, color, dataFile, CFreq, plot_num, bw)
             elif zoom_Bandwidth <= bw+100:#zoom_nr_smp <= 1:
                 #plot orginal    
                 self.original = True
                 scaling_factor = 200000
                 # create a seperate original function
-                self.zoom_dump_data_org(color[2],headerFile, dataFile, CFreq, nSample, plot_num)
+                self.zoom_dump_data_org(color[2],headerFile, dataFile, CFreq, nSample, plot_num, bw, nSample)
                 
         else: 
             tkMessageBox.showwarning(title="Warning", message="Maximum zoom bandwidth must be more than acquisition bandwidth which is %d MHz."%(int(round(self.head[plot_num].bandwidth/1e6))))
@@ -830,7 +829,7 @@ class GUIOptions():
        freqGain = (self.GainCircuitData[0,:])
        newfreqGain = np.linspace(lowerfreq,upperfreq,scaling_factor)
        testGain = np.interp(newfreqGain, freqGain, self.GainCircuitData[1,:])
-       Gaintemp.append([newfreqGain, testGain])
+#       Gaintemp.append([newfreqGain, testGain])
        return testGain 
 
      

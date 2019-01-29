@@ -47,19 +47,17 @@ import math
 from functools import reduce
 #from tkinter import Label, Button, Radiobutton, IntVar
 
-
-
 maxleg = 'max'
 minleg = 'min'
 
-PATHCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF4.csv"
+PATHCCF = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/Spectrum/CCF.csv"
 PATHGAINCIRCUIT = "C:/Users/geomarr/Documents/GitHub/set-up-GUI/RFIChamberMeasure/RFcable/GainCircuitNew.csv"
 
 fields_zoom = "Start Frequency (MHz): ", "Stop Frequency (MHz): ","Maximum amplitude: ","Minimum amplitude: "
 zoom_values = ['1000', '1150', '10', '-30']
 
 plotDataStore = {}
-
+headTemp = {}
 
 headInfo = {}
 
@@ -100,11 +98,6 @@ DEFAULT_STYLE_1 = {"foreground":"black","background":"lightblue"}
 DEFAULT_STYLE_2 = {"foreground":"gray90","background":"darkgreen"}
 DEFAULT_STYLE_3 = {"foreground":"gray90","background":"darkred"}
 DEFAULT_STYLE_NEW = {"foreground":"gray90","background":"darkgreen"}
-
-
-
-
-
 
 class NavSelectToolbar(NavigationToolbar2TkAgg): 
     def __init__(self, canvas,root,parent):
@@ -253,7 +246,7 @@ class GUIOptions():
                                        command=lambda self=self:self.dump_filenames(self.plotNumber, color_set1),
                                        **DEFAULT_STYLE_2).pack(side=LEFT,anchor=SW) 
   
-    def GetCF(self,dataFile,headerFile, plot_num):
+    def GetCF(self,headerFile, plot_num):
 #Load in all the header file get the info and the BW from max and min center freq
         
         file = [value for counter, value in enumerate(headerFile)]
@@ -273,7 +266,7 @@ class GUIOptions():
     def printHeaderInfoNEW(self,dataFile,headerFile, plot_num, Cfreq):
 #Load in all the header file get the info and the BW from max and min center freq
        # d = 
-        headTemp = {}
+      #  headTemp = {}
         headTemp = mpifrRFIHeader.HeaderInformation()
         #print(self.head)
         #if len(headerFile) == len(dataFile):
@@ -322,7 +315,7 @@ class GUIOptions():
         # sort the file as well
         dataFile = []
         headerFile = []    
-        dataFileTEST = []
+   #     dataFileTEST = []
         cnt = self.NumberOfPlot
         color = [color[cnt], color[1+cnt]]
         cnt = self.NumberOfPlot+1
@@ -333,11 +326,8 @@ class GUIOptions():
         for i in range(len(self.Filename)): 
             if self.Filename[i].endswith(".rfi"):
                 headerFile.append(self.Filename[i])
-            elif self.Filename[i].endswith(".npy"):
-                dataFileTEST.append(self.Filename[i])
-                
         
-        Cfreq = self.GetCF(dataFileTEST, headerFile, plot_num)
+        Cfreq = self.GetCF(headerFile, plot_num)
         
         Cfreq, headerFile = self.sortList(Cfreq, headerFile)
         
@@ -348,7 +338,7 @@ class GUIOptions():
         self.checkShameHeader_Data(dataFile,headerFile)
         self.saveHeaderFile(dataFile, headerFile, plot_num, Cfreq)
 
-        headInfo.update(headInfo)
+        headTemp.update(headTemp)
         self.plotDumpData(dataFile, headerFile, plot_num, Cfreq,color)
         self.displayHeaderFile(dataFile, headerFile, plot_num, Cfreq)
         print(time.time()-t0)
@@ -397,29 +387,30 @@ class GUIOptions():
         plotDataStore[plot_num] = dataFile, headerFile, Cfreq, bw, nSample
         
         dataFile = [dataFile[i] for i in range(len(dataFile)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
-        Cfreq2 = [Cfreq[i] for i in range(len(Cfreq)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
+        #Cfreq2 = [Cfreq[i] for i in range(len(Cfreq)) if Cfreq[i] <= 6000*1e6 and Cfreq[i] >= 100*1e6]
         
         fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
         factors = sorted(i for i in fact if i >= 40)
-        scaling_factor = 100#factors[0]
+        scaling_factor = factors[0]
         threads = []
-        for cnt, Cfreq3 in enumerate(Cfreq2):
+        testData = []
+        for cnt, Cf in enumerate(Cfreq):
             
             #data = self.head.readFromFile(headerFile[cnt])
             original_data = self.loadDataFromFileOLD(dataFile[cnt])
-            thread = reduceData.ReduceData(original_data,Cfreq3, plot_num, scaling_factor, bw)
+            testData.append(original_data)
+            thread = reduceData.ReduceData(original_data,Cf, plot_num, scaling_factor, bw)
             thread.start()
             thread.read_reduce_Data()
-            threads.append(thread.FreqMaxMinValues[Cfreq3])
-       
+            threads.append(thread.FreqMaxMinValues[Cf])
         threads = np.array(threads, dtype='float32')
         freq = threads[:,0,:].flatten() 
         specMax = threads[:,1,:].flatten()
         specMin = threads[:,2,:].flatten()
         temp = freq, specMax, specMin  
         temp = np.array(temp)
-        self.calibrateDataNEW(temp,Cfreq2, Stop_freq, Start_freq, color, scaling_factor, plot_num)
-        #self.fig_plot.set_ylim(-50, 100)
+        self.calibrateDataNEW(temp,Cfreq, Stop_freq, Start_freq, color, scaling_factor, plot_num)
+        self.fig_plot.set_ylim(-50, 100)
         self.fig_plot.set_xlim(self.xlim_Start_freq,self.xlim_Stop_freq)
         self.canvas.draw()  
         
@@ -435,16 +426,18 @@ class GUIOptions():
         thread = 0
         new_Cfreq = np.array([], dtype = 'float32')
         t0 = time.time()
+        
         for cnt, CfreqVal in enumerate(te):
             if CfreqVal >= zoom_Start_freq_plot and CfreqVal <= zoom_Stop_freq_plot:
             #data = self.head.readFromFile(headerFile[cnt])
                 new_Cfreq = np.append(new_Cfreq, CfreqVal) 
                 original_data = self.loadDataFromFileOLD(dataFile[cnt])
+                print(original_data)
                 thread = reduceData.ReduceData(original_data,CfreqVal, plot_num, scaling_factor, bw)
                 thread.start()
                 thread.read_reduce_Data()
                 threads.append(thread.FreqMaxMinValues[CfreqVal])
-            
+        
         print(time.time()-t0)
         threads = np.array(threads, dtype='float32')
         freq = threads[:,0,:].flatten() 
@@ -679,7 +672,6 @@ class GUIOptions():
         dataFile = plotDataStore[plot_num][0]
         
         headerFile = plotDataStore[plot_num][1]
-        print(headerFile)
         CFreq = plotDataStore[plot_num][2]
         bw = plotDataStore[plot_num][3]
         nSample = plotDataStore[plot_num][4]
@@ -733,8 +725,8 @@ class GUIOptions():
         org2 = mpatches.Patch(color=color_set2[2], label='Original data 2') 
 
         # Put a legend to the right of the current axis
-        self.fig_plot.legend(handles=[set1_max, set1_min, set2_max, set2_min, org1, org2], loc='upper center', bbox_to_anchor=(0.5, 1.1),
-          fancybox=True, shadow=True, ncol=6)
+       # self.fig_plot.legend(handles=[set1_max, set1_min, set2_max, set2_min, org1, org2], loc='upper center', bbox_to_anchor=(0.5, 1.1),
+        #  fancybox=True, shadow=True, ncol=6)
     
     
     def clear_plot(self):
@@ -814,11 +806,12 @@ class GUIOptions():
          antennaEfficiency = 0.75
        #  temp = []
           
-         #temp = -CCF-G_LNA + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0
+         temp = -CCF-G_LNA + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0
 
-         
-         temp= [(-CCF[1, cnt]-G_LNA[1, cnt] + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0) for cntMain, valMain in enumerate(spectrum[0, :]) for cnt, val in enumerate(CCF[0, :]) if valMain < (val + 1e6) and valMain >= val]
-         temp = temp[:-abs(len(spectrum[0])-len(temp))]
+       #  temp = [(-CCF[1, cnt]-G_LNA[1, cnt] + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0) for cntMain, valMain in enumerate(spectrum[0, :]) for cnt, val in enumerate(CCF[0, :]) if valMain < (val + 1e6) and valMain >= val]
+       #  print(len(temp))
+      #   temp = temp[:-abs(len(spectrum[0])-len(temp))]
+      #   print(len(spectrum[0]))
          return spectrum[0], spectrum[1]+temp, spectrum[2]+temp#, spectrum[3]+temp   
      
     def calCCFdBuvPerM_Original(self,spectrum, CCF, Lcable, G_LNA, antennaEfficiency): # returns in [dBuV/m]
@@ -830,25 +823,7 @@ class GUIOptions():
          
          temp = -CCF-G_LNA + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0
          return spectrum[0], spectrum[1]+temp 
-    ''' 
-    def calibrateData(self, reduced_data, Stop_freq, Start_freq, color_data_set, scaling_factor, plot_num):
-       
-       CCF = self.get_CCF(scaling_factor, Stop_freq, Start_freq,  plot_num)
-      # G_LNA = self.cal_GainCircuit(Stop_freq, Start_freq,plot_num, scaling_factor)
 
-       
-       ylabel = "Electrical Field Strength [dBuV/m]"
-       if self.original == True:
-           Spec = self.calCCFdBuvPerM_Original(reduced_data, CCF, self.head[plot_num].cablecalib, G_LNA, self.head[plot_num].antennacalib)
-           self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
-           #self.original = False
-       else:
-           Spec = self.calCCFdBuvPerM(reduced_data, CCF, self.head[plot_num].cablecalib, G_LNA, self.head[plot_num].antennacalib)
-           self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
-       
-  #     return Spec
-    '''  
-    
     def trim(self, data, Stop_freq, Start_freq):
         Temp = [data[1, cnt] for cnt, val in enumerate(data[0, :]) if val >= Start_freq and val <= Stop_freq]
         Freq = [data[0, cnt] for cnt, val in enumerate(data[0, :]) if data[0, cnt] >= Start_freq and data[0, cnt] <= Stop_freq]
@@ -871,46 +846,24 @@ class GUIOptions():
        CCF = trimCCF#np.resize(trimCCF, (2, len(reduced_data[0])))
        G_LNA = trimGlna#np.resize(trimGlna, (2, len(reduced_data[0])))
        
-#       orgBatch = len(reduced_data[0, :])/len(Cfreq)
-#       newBatch = len(trimCCF[0, :])/len(Cfreq)
-       
- #      if math.fmod(orgBatch, newBatch):
-#           incNR = int(orgBatch/newBatch) + 1
- #      else: 
- #          incNR = int(orgBatch/newBatch)
-   #    while incNR < len(trimCCF[0,:]):
-#           trimCCF[1].insert(incNR, trimCCF[1, incNr-1])
- #          incNR = incNR +1
-      #CCF = [trimCCF[1, cnt] for cnt in range(len(trimCCF[0, :])) if cnt % incNR == 0]
-      # CCF = list(CCF.join(val + val * (cnt % incNR == 2) for cnt, val in enumerate(trimCCF)))
-    #   print(len(CCF))
-       '''
-       for cntMain, valMain in enumerate(trimCCF[0, :]): 
-           cnt = 0
-           for i, val in enumerate(reduced_data[0, :]):
-               if val < (valMain + 1e6) and val >= valMain:
-                   if cnt == incNR+1: 
-                       count = 1 +count
-                       G_LNA = np.append(G_LNA, trimGlna[1, cntMain]) #for i in range(incNR)] 
-                       CCF = np.append(CCF, trimCCF[1, cntMain]) #for i in range(incNR)] 
-                   G_LNA = np.append(G_LNA, trimGlna[1, cntMain])  
-                   CCF = np.append(CCF, trimCCF[1, cntMain]) 
-                   cnt = 1 +cnt
-              #print(cnt)
-                      #CCF = np.append(CCF, trimCCF[1, cntMain])
-        '''
-   #    CCF = np.array(CCF, dtype='float32')
-    #   G_LNA = np.array(G_LNA, dtype= 'float32')
-       print(CCF[0,:])
+     #  for cntMain, valMain in enumerate(trimCCF[0, :]): 
+     #      for i, val in enumerate(reduced_data[0, :]):
+
        if self.original == True:
            Spec = self.calCCFdBuvPerM_Original(reduced_data, CCF, self.head[plot_num][Cfreq].cablecalib, G_LNA, self.head[plot_num][Cfreq].antennacalib)
          
            self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
            #self.original = False
        else:
-           Spec = self.calCCFdBuvPerM(reduced_data, CCF, self.head[plot_num][Cfreq[0]].cablecalib, G_LNA, self.head[plot_num][Cfreq[0]].antennacalib)
-           
-           self.plot_data(Spec,ylabel,color_data_set, Start_freq, Stop_freq)
+          # Spec = self.calCCFdBuvPerM(reduced_data, CCF, self.head[plot_num][Cfreq[0]].cablecalib, G_LNA, self.head[plot_num][Cfreq[0]].antennacalib)
+           for cntMain, valMain in enumerate(reduced_data[0, :]):  
+               
+              for cnt, val in enumerate(CCF[0, :]): 
+           #        if valMain < (val + 1e6) and valMain >= val:
+        #  temp= [(-CCF[1, cnt]-G_LNA[1, cnt] + Lcable - (10.0 * np.log10(antennaEfficiency)) + (10.0 * np.log10(Z0 / (4.0 * np.pi * (r*r)))) + 90.0) for cntMain, valMain in enumerate(spectrum[0, :]) for cnt, val in enumerate(CCF[0, :]) if valMain < (val + 1e6) and valMain >= val]
+           #temp = temp[:-abs(len(spectrum[0])-len(temp))]
+             #          print(cntMain)
+                 self.plot_data(self.calCCFdBuvPerM(reduced_data[:,cntMain], CCF[1, cnt], self.head[plot_num][Cfreq[0]].cablecalib, G_LNA[1,cnt], self.head[plot_num][Cfreq[0]].antennacalib),ylabel,color_data_set, Start_freq, Stop_freq)
        
 
     def getZoomInput(self):
@@ -935,116 +888,12 @@ class GUIOptions():
         else:
             self.max_plot, =self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[1], color=color[0])
             self.min_plot, = self.fig_plot.plot(reduced_data[0]/1e6,reduced_data[2], color=color[1])
-
-    '''           
-class CandidateFinder(object):
-    def __init__(self):
-        self.filenames = []
-        self.counter = None
-
-    def _is_valid(self,pfd):
-        ps_valid = os.path.isfile("%s.ps" % pfd)
-        bp_valid = os.path.isfile("%s.bestprof" % pfd)
-        return all((ps_valid,bp_valid))
-
-    def get_from_directory(self,directory):
-        pfds = glob.glob("%s/*.pfd" % directory)
-        print ("%s/*.pfd" % directory)
-        if not pfds:
-            return None
-        for pfd in pfds:
-            if self._is_valid(pfd):
-                self.filenames.append(pfd)
-
-    def get_from_directories(self,directory):
-        counter = 0
-        print ("Searching %s" % directory)
-        rambler = os.walk(directory)
-        for path,dirnames,filenames in rambler:
-            for filename in filenames:
-                if filename.endswith(".pfd"):
-                    pfd = os.path.join(path,filename)
-                    if self._is_valid(pfd):
-                        self.filenames.append(pfd)
-                        counter+=1
-                        sys.stdout.write("Found %d files...\r"%counter)
-                        sys.stdout.flush()
-                
-    def parse_all(self):
-        filenames = list(set(self.filenames))
-        nfiles = len(filenames)
-        recarray = np.recarray(nfiles,dtype=BESTPROF_DTYPE)
-        print ("Parsing %d .bestprof files..." % nfiles)
-        for ii,filename in enumerate(filenames):
-            if ii%10 == 0:
-                sys.stdout.write("%.2f\r"%(100.*ii/nfiles))
-                sys.stdout.flush()
-            bestprof_file = "%s.bestprof" % filename
-            info = parse_bestprof(bestprof_file)
-            for key in PLOTABLE_FIELDS:
-                if key in info.keys():
-                    val = info[key]
-                else: 
-                    val = 0
-                recarray[ii][key] = val
-            recarray[ii]["PFD_file"] = filename
-        return recarray
-    
-    def parse_bestprof(filename):
-        f = open(filename,"r")
-        lines = f.readlines()
-        f.close()
-        info = {} 
-        for ii,line in enumerate(lines):
-            if not line.startswith("# "):
-                continue
-            if line.startswith("# Prob(Noise)"):
-                line = line[2:].split("<")
-            else:
-                line = line[2:].split("=")
-                
-            key = line[0].strip()
-            value = line[1].strip()
             
-            if "+/-" in value:
-                value = value.split("+/-")[0]
-                if "inf" in value:
-                    value = "0.0"
-    
-            if value == "N/A":
-                value = "0.0"
-    
-            if "Epoch" in key:
-                key = key.split()[0]
-    
-            if key == "Prob(Noise)":
-                key = "Sigma"
-                try:
-                    value = value.split("(")[1].split()[0].strip("~")
-                except:
-                    value = "30.0"
-                        
-            info[key]=value
-        return info
- 
-        '''
+
 if __name__ == '__main__':
    root = Tk()
    root.tk_setPalette(**DEFAULT_PALETTE)
    start = GUI_set_up(root)
-   CCFdata = start.options.CCF_DatafileCSV(PATHCCF)
-   temp_spec = np.array([],dtype='float32')
-   Start_freq = 100*1e6
-   Stop_freq = 6000*1e6  
-   nSample = 3555555
-   fact = [i for i in range(1, nSample + 1) if nSample % i == 0]
-   factors = sorted(i for i in fact if i >= 40)
-   scaling_factor = factors[0]
-   CCFTemp = [CCFdata[cnt,1] for cnt, val in enumerate(CCFdata[:,0]) if val >= Start_freq and val <= Stop_freq]
-   CCFFreq = [CCFdata[cnt,0] for cnt, val in enumerate(CCFdata[:,0]) if CCFdata[cnt,0] >= Start_freq and CCFdata[cnt,0] <= Stop_freq]
-       
-   x = np.linspace(Start_freq, Stop_freq, scaling_factor)
-   temp_spec = np.interp(x, CCFFreq, CCFTemp)
-   temp_spec2 = [x, temp_spec]
+   
 
    root.mainloop() 

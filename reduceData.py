@@ -21,42 +21,26 @@ class ReduceData(threading.Thread):
         # read in the whole BW in one array
 # set the display sample size depending on the display bandwidth and resolution  
      #   t0 = time.time()
+        
         spec = self.dBuV_M2V_M(self.original_data)
         #freq = spectrum[0]
+        
         x = int(len(self.original_data)/self.scaling_factor)
         spec_min = np.array([], dtype=np.float32)
         spec_max = np.array([], dtype=np.float32)
         freq = np.array([], dtype=np.float32)
-        #freq_max = np.array([], dtype=np.float32)
-        #bw = self.head[self.plot_num].bandwidth
         Start_freq = self.Cfreq -self.bw/2
         Stop_freq = self.Cfreq +self.bw/2
         spec_max = [np.max(spec[(i*x):(x*i+x)]) for i in range (self.scaling_factor)]
-        #ind_max  = [(np.argmax(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
         spec_min = [np.min(spec[(i*x):(x*i+x)]) for i in range (self.scaling_factor)]
-        
-       # spec_max = [np.max(spec[(i*self.scaling_factor):(self.scaling_factor*i+self.scaling_factor)]) for i in range (x)]
-        #ind_max  = [(np.argmax(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
-      #  spec_min = [np.min(spec[(i*self.scaling_factor):(self.scaling_factor*i+self.scaling_factor)]) for i in range (x)]
-        
-        
-        
-        
-        #ind_min  = [(np.argmin(spec[(i*x):(x*i+x)])+x*i) for i in range (scaling_factor)]
-        #freq_max = [freq[value] for count, value in enumerate(ind_max)]
-        #freq_min = [freq[value] for count, value in enumerate(ind_min)]
-            #self.leg_data = [spec_max, spec_min] 
         spec_max = self.V_M2dBuV_M(spec_max)
         spec_min = self.V_M2dBuV_M(spec_min)
+        print(self.Cfreq)
         freq = np.linspace(Start_freq,Stop_freq,len(spec_max)) 
         temp = freq,spec_max,spec_min
         ReduceData.lock.acquire()
-        ReduceData.FreqMaxMinValues[self.Cfreq] = temp#np.array(temp, dtype=np.float32)
-        #ReduceData.q.put(np.array(temp, dtype=np.float32))
+        ReduceData.FreqMaxMinValues[self.Cfreq] = temp
         ReduceData.lock.release()
-       # data = np.array(temp, dtype=np.float32)
-       # print(time.time)
-      #  return data       
     
     def dBuV_M2V_M(self,spec):
         VperM = pow(10,(spec-120)/20)
